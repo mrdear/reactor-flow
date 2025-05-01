@@ -36,6 +36,11 @@ public class CompletableFutureFlowExecuteGraph {
     private Set<String> completedNodes = Collections.synchronizedSet(new HashSet<>());
 
     /**
+     * 存储已添加到队列的节点ID，防止重复添加
+     */
+    private Set<String> queuedNodes = Collections.synchronizedSet(new HashSet<>());
+
+    /**
      * 使用队列进行BFS遍历
      * 使用ConcurrentLinkedQueue确保线程安全
      */
@@ -62,6 +67,7 @@ public class CompletableFutureFlowExecuteGraph {
         TaskNode startNode = dag.getStartingNode();
         // 添加起始节点
         runningQueue.offer(startNode);
+        queuedNodes.add(startNode.getId());
 
         // 使用递归方式处理队列
         return processQueue();
@@ -87,6 +93,8 @@ public class CompletableFutureFlowExecuteGraph {
         TaskNode currentNode;
         while ((currentNode = runningQueue.poll()) != null) {
             currentNodes.add(currentNode);
+            // 从queuedNodes中移除，因为节点已经从队列中取出
+            queuedNodes.remove(currentNode.getId());
         }
 
         System.out.println("[DEBUG_LOG] 当前队列中的节点数量: " + currentNodes.size());
@@ -101,9 +109,6 @@ public class CompletableFutureFlowExecuteGraph {
             if (allPredecessorsCompleted) {
                 System.out.println("[DEBUG_LOG] 节点准备好并发执行: " + node.getId());
                 readyNodes.add(node);
-            } else {
-                // 还无法执行，重新放回队列尾部，确保下次能再次判断
-                runningQueue.offer(node);
             }
         }
 
@@ -125,8 +130,15 @@ public class CompletableFutureFlowExecuteGraph {
 
                             // 将后继节点加入队列
                             for (TaskNode successor : node.getSuccessors()) {
-                                System.out.println("添加后继节点到队列: " + successor.getId());
-                                runningQueue.offer(successor);
+                                String successorId = successor.getId();
+                                // 只有当节点未完成且未在队列中时才添加
+                                if (!completedNodes.contains(successorId) && !queuedNodes.contains(successorId)) {
+                                    System.out.println("添加后继节点到队列: " + successorId);
+                                    runningQueue.offer(successor);
+                                    queuedNodes.add(successorId);
+                                } else {
+                                    System.out.println("[DEBUG_LOG] 跳过已在队列或已完成的节点: " + successorId);
+                                }
                             }
                             return this.processQueue();
                         }))
