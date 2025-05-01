@@ -1,4 +1,4 @@
-package fun.libx.flow.task.impl;
+package fun.libx.flow.mvc.task;
 
 import fun.libx.flow.FlowContext;
 import fun.libx.flow.event.FlowEventBus;
@@ -11,6 +11,8 @@ import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder;
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
 import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
 import org.apache.hc.core5.concurrent.FutureCallback;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -19,10 +21,13 @@ import java.util.concurrent.CompletableFuture;
  * @author quding
  * @since 2025/5/1
  */
+@Component
 public class HttpDelayInstance extends AbstractTaskInstance {
 
-    CloseableHttpAsyncClient CLIENT = HttpAsyncClients.createDefault();
+    private static final CloseableHttpAsyncClient CLIENT = HttpAsyncClients.createDefault();
 
+
+    @Autowired
     public HttpDelayInstance(FlowEventBus eventBus) {
         super(eventBus);
         // 启动HTTP客户端

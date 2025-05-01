@@ -4,14 +4,15 @@ import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.FlowTaskInstance;
-import fun.libx.flow.task.TaskOutputResult;
-import fun.libx.flow.task.impl.EndTaskInstance;
-import fun.libx.flow.task.impl.FastTaskInstance;
-import fun.libx.flow.task.impl.HttpDelayInstance;
-import fun.libx.flow.task.impl.StartTaskInstance;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 /**
@@ -38,14 +39,24 @@ public class CompletableFutureFlowExecuteGraph {
     private ExecutorService executorService;
 
     /**
+     * 任务分发器
+     */
+    private FlowTaskEngineRouter flowTaskEngineRouter;
+
+    /**
+     * 事件分发器
+     */
+    private FlowEventBus flowEventBus;
+
+    /**
      * 存储已完成的节点
      */
-    private Set<String> completedNodes = Collections.synchronizedSet(new HashSet<>());
+    private Set<String> completedNodes = ConcurrentHashMap.newKeySet();
 
     /**
      * 存储已添加到队列的节点ID，防止重复添加
      */
-    private Set<String> queuedNodes = Collections.synchronizedSet(new HashSet<>());
+    private Set<String> queuedNodes = ConcurrentHashMap.newKeySet();
 
     /**
      * 使用队列进行BFS遍历
@@ -58,20 +69,20 @@ public class CompletableFutureFlowExecuteGraph {
      *
      * @param dag 要执行的DAG图
      */
-    public CompletableFutureFlowExecuteGraph(FlowDag dag, int nThreads) {
+    public CompletableFutureFlowExecuteGraph(FlowDag dag, FlowContext context, ExecutorService executorService, FlowTaskEngineRouter flowTaskEngineRouter, FlowEventBus flowEventBus) {
         this.dag = dag;
-        this.executorService = Executors.newFixedThreadPool(nThreads);
+        this.context = context;
+        this.executorService = executorService;
+        this.flowTaskEngineRouter = flowTaskEngineRouter;
+        this.flowEventBus = flowEventBus;
     }
 
     /**
      * 使用BFS方式执行DAG图
      *
-     * @param context 执行上下文
      * @return 执行完成的Future
      */
-    public CompletableFuture<Void> bfsExecute(FlowContext context) {
-        this.context = context;
-
+    public CompletableFuture<Void> bfsExecute() {
         // 获取起始节点（没有前驱的节点）
         TaskNode startNode = dag.getStartingNode();
         // 添加起始节点
@@ -165,27 +176,13 @@ public class CompletableFutureFlowExecuteGraph {
      * @return CompletableFuture<Void>
      */
     private CompletableFuture<?> executeNode(TaskNode node) {
-        // 这里是节点执行的逻辑，可以根据实际需求实现
-
         // 记录开始时间
         long startTime = System.currentTimeMillis();
 
-        TaskType type = node.getType();
-        FlowEventBus eventBus = new FlowEventBus();
+        // 寻找实例
+        FlowTaskInstance instance = flowTaskEngineRouter.router(node, context);
 
-        FlowTaskInstance instance = null;
-
-        if (type == TaskType.START) {
-            instance = new StartTaskInstance(eventBus);
-        } else if (type == TaskType.DELAY) {
-            instance = new HttpDelayInstance(eventBus);
-        } else if (type == TaskType.FAST) {
-            instance = new FastTaskInstance(eventBus);
-        } else {
-            instance = new EndTaskInstance(eventBus);
-        }
-
-        // 直接调用taskinstance的execute方法
+        // 直接调用task instance的execute方法
         System.out.println("[DEBUG_LOG] 并发执行节点: " + node.getId() + " 线程: " + Thread.currentThread().getName());
         return instance.execute(node, context)
                 .whenComplete((r, v) -> {
@@ -196,12 +193,4 @@ public class CompletableFutureFlowExecuteGraph {
                 });
     }
 
-    /**
-     * 关闭线程池
-     */
-    public void shutdown() {
-        if (executorService != null && !executorService.isShutdown()) {
-            executorService.shutdown();
-        }
-    }
 }

@@ -1,0 +1,61 @@
+package fun.libx.flow.mvc.model;
+
+import fun.libx.flow.FlowContext;
+import lombok.Getter;
+import lombok.Setter;
+
+/**
+ * Extended FlowContext with additional fields for the Spring Boot application.
+ * 
+ * @author quding
+ * @since 2025/5/1
+ */
+public class ExtendedFlowContext extends FlowContext {
+    
+    /**
+     * Unique identifier for the flow.
+     */
+    @Getter
+    @Setter
+    private String flowId;
+    
+    /**
+     * Start time of the flow execution.
+     */
+    @Getter
+    @Setter
+    private long startTime;
+    
+    /**
+     * End time of the flow execution.
+     */
+    @Getter
+    @Setter
+    private long endTime;
+    
+    /**
+     * Creates a new ExtendedFlowContext with a generated flow ID and the current time as start time.
+     */
+    public ExtendedFlowContext() {
+        this.startTime = System.currentTimeMillis();
+    }
+    
+    /**
+     * Calculates the duration of the flow execution in milliseconds.
+     * 
+     * @return the duration in milliseconds, or -1 if the flow is still running
+     */
+    public long getDuration() {
+        if (endTime == 0) {
+            return -1;
+        }
+        return endTime - startTime;
+    }
+    
+    /**
+     * Marks the flow as completed by setting the end time.
+     */
+    public void markCompleted() {
+        this.endTime = System.currentTimeMillis();
+    }
+}
