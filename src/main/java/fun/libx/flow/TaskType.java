@@ -7,5 +7,9 @@ package fun.libx.flow;
  */
 public enum TaskType {
 
+    START,
+    END,
+    FAST,
+    DELAY,
 
 }

@@ -10,7 +10,4 @@ public class FlowContext {
 
     private AtomicReference<FlowStatus> status;
 
-    private FlowContext() {
-    }
-
 }

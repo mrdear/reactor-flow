@@ -2,10 +2,9 @@ package fun.libx.flow.model;
 
 import fun.libx.flow.CompletableFutureFlowExecuteGraph;
 import fun.libx.flow.FlowContext;
+import fun.libx.flow.TaskType;
 import org.junit.jupiter.api.Test;
 
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -27,33 +26,25 @@ public class CompletableFutureBfsExecutionExample {
         FlowDag flowDag = new FlowDag();
 
         // 创建任务节点
-        TaskNode startNode = createTaskNode("start");
+        TaskNode startNode = createTaskNode("start", TaskType.START);
 
         // 创建多个同级处理节点，这些节点将会并发执行
-        TaskNode processNode1 = createTaskNode("process1");
-        TaskNode processNode2 = createTaskNode("process2");
-        TaskNode processNode3 = createTaskNode("process3");
-        TaskNode processNode4 = createTaskNode("process4");
-        TaskNode processNode5 = createTaskNode("process5");
+        TaskNode processNode1 = createTaskNode("process1", TaskType.FAST);
+        TaskNode processNode2 = createTaskNode("process2", TaskType.DELAY);
 
         // 创建第二层同级节点
-        TaskNode middleNode1 = createTaskNode("middle1");
-        TaskNode middleNode2 = createTaskNode("middle2");
-        TaskNode middleNode3 = createTaskNode("middle3");
+        TaskNode middleNode1 = createTaskNode("middle1", TaskType.DELAY);
+        TaskNode middleNode2 = createTaskNode("middle2", TaskType.FAST);
 
-        TaskNode joinNode = createTaskNode("join");
-        TaskNode endNode = createTaskNode("end");
+        TaskNode joinNode = createTaskNode("join", TaskType.FAST);
+        TaskNode endNode = createTaskNode("end", TaskType.END);
 
         // 添加节点到DAG
         flowDag.addTaskNode(startNode);
         flowDag.addTaskNode(processNode1);
         flowDag.addTaskNode(processNode2);
-        flowDag.addTaskNode(processNode3);
-        flowDag.addTaskNode(processNode4);
-        flowDag.addTaskNode(processNode5);
         flowDag.addTaskNode(middleNode1);
         flowDag.addTaskNode(middleNode2);
-        flowDag.addTaskNode(middleNode3);
         flowDag.addTaskNode(joinNode);
         flowDag.addTaskNode(endNode);
 
@@ -61,21 +52,14 @@ public class CompletableFutureBfsExecutionExample {
         // 第一层：start -> process1-5 (这些节点将并发执行)
         flowDag.addEdge("start", "process1");
         flowDag.addEdge("start", "process2");
-        flowDag.addEdge("start", "process3");
-        flowDag.addEdge("start", "process4");
-        flowDag.addEdge("start", "process5");
 
         // 第二层：process节点 -> middle节点 (形成第二层并发)
         flowDag.addEdge("process1", "middle1");
-        flowDag.addEdge("process2", "middle1");
-        flowDag.addEdge("process3", "middle2");
-        flowDag.addEdge("process4", "middle2");
-        flowDag.addEdge("process5", "middle3");
+        flowDag.addEdge("process2", "middle2");
 
         // 第三层：middle节点 -> join
         flowDag.addEdge("middle1", "join");
         flowDag.addEdge("middle2", "join");
-        flowDag.addEdge("middle3", "join");
 
         // 最后：join -> end
         flowDag.addEdge("join", "end");
@@ -92,7 +76,7 @@ public class CompletableFutureBfsExecutionExample {
         // 创建执行图并执行
         System.out.println("\n开始BFS执行DAG (使用CompletableFuture，观察同级节点的并发执行):");
         // 使用带外部完成节点集合的构造函数
-        CompletableFutureFlowExecuteGraph executeGraph = new CompletableFutureFlowExecuteGraph(flowDag);
+        CompletableFutureFlowExecuteGraph executeGraph = new CompletableFutureFlowExecuteGraph(flowDag, 3);
         FlowContext context = new FlowContext();
 
         // 添加更详细的日志
@@ -114,9 +98,10 @@ public class CompletableFutureBfsExecutionExample {
         executeGraph.shutdown();
     }
 
-    private static TaskNode createTaskNode(String id) {
+    private static TaskNode createTaskNode(String id, TaskType type) {
         TaskNode node = new TaskNode();
         node.setId(id);
+        node.setType(type);
         return node;
     }
 }

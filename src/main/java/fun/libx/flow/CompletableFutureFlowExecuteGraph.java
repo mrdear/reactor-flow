@@ -1,7 +1,14 @@
 package fun.libx.flow;
 
+import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
+import fun.libx.flow.task.FlowTaskInstance;
+import fun.libx.flow.task.TaskOutputResult;
+import fun.libx.flow.task.impl.EndTaskInstance;
+import fun.libx.flow.task.impl.FastTaskInstance;
+import fun.libx.flow.task.impl.HttpDelayInstance;
+import fun.libx.flow.task.impl.StartTaskInstance;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -10,7 +17,7 @@ import java.util.stream.Collectors;
 /**
  * 使用CompletableFuture实现的DAG执行图
  * 功能与FlowExecuteGraph相同，但使用CompletableFuture代替Mono/Flux
- * 
+ *
  * @author quding
  * @since 2025/4/27
  */
@@ -48,15 +55,17 @@ public class CompletableFutureFlowExecuteGraph {
 
     /**
      * 构造函数
+     *
      * @param dag 要执行的DAG图
      */
-    public CompletableFutureFlowExecuteGraph(FlowDag dag) {
+    public CompletableFutureFlowExecuteGraph(FlowDag dag, int nThreads) {
         this.dag = dag;
-        this.executorService = Executors.newCachedThreadPool();
+        this.executorService = Executors.newFixedThreadPool(nThreads);
     }
 
     /**
      * 使用BFS方式执行DAG图
+     *
      * @param context 执行上下文
      * @return 执行完成的Future
      */
@@ -75,6 +84,7 @@ public class CompletableFutureFlowExecuteGraph {
 
     /**
      * 处理BFS队列，支持节点的并发执行
+     *
      * @return CompletableFuture<Void>
      */
     private CompletableFuture<Void> processQueue() {
@@ -123,7 +133,7 @@ public class CompletableFutureFlowExecuteGraph {
         // 并发执行所有准备好的节点
         List<CompletableFuture<Void>> futures = readyNodes.stream()
                 .map(node -> executeNode(node)
-                        .thenCompose(v -> {
+                        .thenComposeAsync(v -> {
                             System.out.println("节点 " + node.getId() + " 处理完成，准备添加后继节点");
                             // 标记当前节点为已完成
                             completedNodes.add(node.getId());
@@ -141,7 +151,7 @@ public class CompletableFutureFlowExecuteGraph {
                                 }
                             }
                             return this.processQueue();
-                        }))
+                        }, executorService))
                 .collect(Collectors.toList());
 
         // 等待所有节点执行完成
@@ -150,41 +160,40 @@ public class CompletableFutureFlowExecuteGraph {
 
     /**
      * 执行单个节点的任务
+     *
      * @param node 要执行的节点
      * @return CompletableFuture<Void>
      */
-    private CompletableFuture<Void> executeNode(TaskNode node) {
+    private CompletableFuture<?> executeNode(TaskNode node) {
         // 这里是节点执行的逻辑，可以根据实际需求实现
-        // 例如，可以根据节点类型调用不同的处理逻辑
-        System.out.println("[DEBUG_LOG] 并发执行节点: " + node.getId() + " 线程: " + Thread.currentThread().getName());
 
         // 记录开始时间
         long startTime = System.currentTimeMillis();
 
-        // 模拟异步执行任务
-        return CompletableFuture.runAsync(() -> {
-            // 使用System.out确保在测试输出中可见
-            System.out.println("[DEBUG_LOG] 节点 " + node.getId() + " 开始执行 线程: " + Thread.currentThread().getName() + " 时间: " + System.currentTimeMillis());
+        TaskType type = node.getType();
+        FlowEventBus eventBus = new FlowEventBus();
 
-            // 模拟任务执行时间
-            try {
-                Thread.sleep(ThreadLocalRandom.current().nextInt(500, 1000) + 500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("任务执行被中断", e);
-            }
+        FlowTaskInstance instance = null;
 
-            // 使用System.out确保在测试输出中可见
-            long endTime = System.currentTimeMillis();
-            System.out.println("[DEBUG_LOG] 节点 " + node.getId() + " 执行完成 线程: " + Thread.currentThread().getName() + 
-                    " 时间: " + endTime + " 耗时: " + (endTime - startTime) + "ms");
-        }, executorService)
-        // 添加错误处理
-        .exceptionally(e -> {
-            System.out.println("[DEBUG_LOG] 节点 " + node.getId() + " 执行失败: " + e.getMessage());
-            // 记录错误但继续执行
-            return null;
-        });
+        if (type == TaskType.START) {
+            instance = new StartTaskInstance(eventBus);
+        } else if (type == TaskType.DELAY) {
+            instance = new HttpDelayInstance(eventBus);
+        } else if (type == TaskType.FAST) {
+            instance = new FastTaskInstance(eventBus);
+        } else {
+            instance = new EndTaskInstance(eventBus);
+        }
+
+        // 直接调用taskinstance的execute方法
+        System.out.println("[DEBUG_LOG] 并发执行节点: " + node.getId() + " 线程: " + Thread.currentThread().getName());
+        return instance.execute(node, context)
+                .whenComplete((r, v) -> {
+                    // 使用System.out确保在测试输出中可见
+                    long endTime = System.currentTimeMillis();
+                    System.out.println("[DEBUG_LOG] 节点 " + node.getId() + " 执行完成 线程: " + Thread.currentThread().getName() +
+                            " 时间: " + endTime + " 耗时: " + (endTime - startTime) + "ms");
+                });
     }
 
     /**

@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import fun.libx.flow.TaskType;
 import lombok.Data;
 import lombok.Getter;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,6 +38,7 @@ public class TaskNode {
      * 任务类型
      */
     @Getter
+    @Setter
     private TaskType type;
     /**
      * 任务自身参数
