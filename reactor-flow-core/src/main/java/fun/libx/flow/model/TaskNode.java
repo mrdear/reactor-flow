@@ -2,6 +2,8 @@ package fun.libx.flow.model;
 
 import com.alibaba.fastjson2.JSONObject;
 import fun.libx.flow.TaskType;
+import fun.libx.flow.common.DataKey;
+import fun.libx.flow.common.DataProvider;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,7 +17,7 @@ import java.util.Set;
  * @author quding
  * @since 2025/4/27
  */
-public class TaskNode {
+public class TaskNode implements DataProvider {
     /**
      * 节点id
      */
@@ -79,6 +81,11 @@ public class TaskNode {
      */
     public void addSuccessor(TaskNode successor) {
         successors.add(successor);
+    }
+
+    @Override
+    public <T> T getData(DataKey<T> dataKey) {
+        return defineConfig.getObject(dataKey.dataId, dataKey.clazz);
     }
 
     @Override

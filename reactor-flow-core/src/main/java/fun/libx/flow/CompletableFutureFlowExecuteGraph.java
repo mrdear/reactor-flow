@@ -1,6 +1,6 @@
 package fun.libx.flow;
 
-import fun.libx.flow.event.FlowEventBus;
+import fun.libx.flow.exception.NodeException;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.FlowTaskInstance;
@@ -98,6 +98,12 @@ public class CompletableFutureFlowExecuteGraph {
      * @return CompletableFuture<Void>
      */
     private CompletableFuture<Void> processQueue() {
+
+        // 检查是否取消调度执行
+        if (this.context.isCancellationTriggered()) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         // 递归结束标识
         if (runningQueue.isEmpty()) {
             LOGGER.info("队列为空,忽略本次执行");
@@ -144,6 +150,11 @@ public class CompletableFutureFlowExecuteGraph {
         List<CompletableFuture<Void>> futures = readyNodes.stream()
                 .map(node -> executeNode(node)
                         .thenComposeAsync(v -> {
+                            // 检查是否已经取消
+                            if (context.isCancellationTriggered()) {
+                                return CompletableFuture.completedFuture(null);
+                            }
+
                             LOGGER.info("节点 {} 处理完成，准备添加后继节点", node.getId());
                             // 标记当前节点为已完成
                             completedNodes.add(node.getId());
@@ -151,18 +162,17 @@ public class CompletableFutureFlowExecuteGraph {
                             // 将后继节点加入队列
                             for (TaskNode successor : node.getSuccessors()) {
                                 String successorId = successor.getId();
-                                // 只有当节点未完成且未在队列中时才添加
-                                if (!completedNodes.contains(successorId) && !queuedNodes.contains(successorId)) {
+                                // 使用原子操作检查并添加节点，防止并发问题
+                                if (!completedNodes.contains(successorId) && queuedNodes.add(successorId)) {
                                     LOGGER.info("添加后继节点到队列: {}", successorId);
                                     runningQueue.offer(successor);
-                                    queuedNodes.add(successorId);
                                 } else {
                                     LOGGER.info("跳过已在队列或已完成的节点: {}", successorId);
                                 }
                             }
                             return this.processQueue();
                         }, executorService))
-                .collect(Collectors.toList());
+                .toList();
 
         // 等待所有节点执行完成
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
@@ -175,6 +185,11 @@ public class CompletableFutureFlowExecuteGraph {
      * @return CompletableFuture<Void>
      */
     private CompletableFuture<?> executeNode(TaskNode node) {
+        // 检查是否已经取消
+        if (context.isCancellationTriggered()) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         // 记录开始时间
         long startTime = System.currentTimeMillis();
 
@@ -184,11 +199,26 @@ public class CompletableFutureFlowExecuteGraph {
         // 直接调用task instance的execute方法
         LOGGER.info("并发执行节点: {} 线程: {}", node.getId(), Thread.currentThread().getName());
         return instance.execute(node, context)
+                .handle((result, throwable) -> {
+                    // 正常情况
+                    if (null == throwable) {
+                        return result;
+                    }
+
+                    // 异常: 检查节点是否允许忽略异常
+                    if (FlowDataKeys.NODE_IGNORE_EXCEPTION.hasTureData(node)) {
+                        return result;
+                    }
+
+                    // 未配置,则取消调度,继续传递异常
+                    context.triggerCancellation();
+                    throw new NodeException("handle node failed", throwable);
+                })
                 .whenComplete((r, v) -> {
                     // 记录执行完成时间和耗时
                     long endTime = System.currentTimeMillis();
-                    LOGGER.info("节点 {} 执行完成 线程: {} 时间: {} 耗时: {}ms", 
-                            node.getId(), Thread.currentThread().getName(), endTime, (endTime - startTime));
+                    LOGGER.info("节点 {} 执行完成,结果: {} 线程: {} 时间: {} 耗时: {}ms",
+                            node.getId(), null == v, Thread.currentThread().getName(), endTime, (endTime - startTime));
                 });
     }
 
