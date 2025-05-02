@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <!-- Console appender for standard output (info and below) -->
+        <Console name="ConsoleOut" target="SYSTEM_OUT">
+            <ThresholdFilter level="INFO"/>
+            <PatternLayout pattern="%d %highlight{%level} [%t] %highlight{%c{1.}} - %msg%n%throwable"/>
+        </Console>
+        
+        <!-- Console appender for error output (warn and above) -->
+        <Console name="ConsoleErr" target="SYSTEM_ERR">
+            <ThresholdFilter level="ERROR"/>
+            <PatternLayout pattern="%d %highlight{%level} [%t] %c{1.} - %msg%n%throwable"/>
+        </Console>
+    </Appenders>
+    
+    <Loggers>
+        <!-- Root logger configuration -->
+        <Root level="info">
+            <AppenderRef ref="ConsoleOut"/>
+            <AppenderRef ref="ConsoleErr"/>
+        </Root>
+        
+        <!-- Application specific loggers -->
+        <Logger name="fun.libx.flow" level="debug" additivity="false">
+            <AppenderRef ref="ConsoleOut"/>
+            <AppenderRef ref="ConsoleErr"/>
+        </Logger>
+        
+        <!-- Spring framework loggers -->
+        <Logger name="org.springframework" level="info" additivity="false">
+            <AppenderRef ref="ConsoleOut"/>
+            <AppenderRef ref="ConsoleErr"/>
+        </Logger>
+    </Loggers>
+</Configuration>

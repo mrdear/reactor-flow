@@ -94,7 +94,7 @@ public class FlowController {
 
         // Create and execute the flow
         CompletableFutureFlowExecuteGraph graph = new CompletableFutureFlowExecuteGraph(
-                DAG, context, executorService, router, eventBus);
+                DAG, context, executorService, router);
 
         // Return the future directly
         return graph.bfsExecute()

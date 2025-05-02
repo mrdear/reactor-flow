@@ -36,7 +36,7 @@ public class FlowEngineConfig {
      */
     @Bean
     public ExecutorService flowExecutorService() {
-        return Executors.newFixedThreadPool(10);
+        return Executors.newFixedThreadPool(2);
     }
 
 }

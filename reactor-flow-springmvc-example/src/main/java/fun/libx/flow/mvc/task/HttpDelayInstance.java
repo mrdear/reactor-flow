@@ -8,9 +8,13 @@ import fun.libx.flow.task.TaskOutputResult;
 import org.apache.hc.client5.http.async.methods.SimpleHttpRequest;
 import org.apache.hc.client5.http.async.methods.SimpleHttpResponse;
 import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder;
+import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
 import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
 import org.apache.hc.core5.concurrent.FutureCallback;
+import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -24,14 +28,33 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class HttpDelayInstance extends AbstractTaskInstance {
 
-    private static final CloseableHttpAsyncClient CLIENT = HttpAsyncClients.createDefault();
+    private static final CloseableHttpAsyncClient CLIENT;
 
+
+    static {
+        PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+                .setMaxConnPerRoute(200)  // Increase connections per route
+                .setMaxConnTotal(200)    // Increase total connections
+                .build();
+
+
+        // Configure request config with timeouts
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofSeconds(10))
+                .setResponseTimeout(Timeout.ofSeconds(10))
+                .build();
+
+        // Build the client with custom configuration
+        CLIENT = HttpAsyncClients.custom()
+                .setConnectionManager(connectionManager)
+                .setDefaultRequestConfig(requestConfig)
+                .build();
+        CLIENT.start();
+    }
 
     @Autowired
     public HttpDelayInstance(FlowEventBus eventBus) {
         super(eventBus);
-        // 启动HTTP客户端
-        CLIENT.start();
     }
 
     @Override

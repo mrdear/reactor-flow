@@ -4,6 +4,8 @@ import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.FlowTaskInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +25,9 @@ import java.util.stream.Collectors;
  * @since 2025/4/27
  */
 public class CompletableFutureFlowExecuteGraph {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CompletableFutureFlowExecuteGraph.class);
+
     /**
      * 绑定的DAG图
      */
@@ -42,11 +47,6 @@ public class CompletableFutureFlowExecuteGraph {
      * 任务分发器
      */
     private FlowTaskEngineRouter flowTaskEngineRouter;
-
-    /**
-     * 事件分发器
-     */
-    private FlowEventBus flowEventBus;
 
     /**
      * 存储已完成的节点
@@ -69,12 +69,11 @@ public class CompletableFutureFlowExecuteGraph {
      *
      * @param dag 要执行的DAG图
      */
-    public CompletableFutureFlowExecuteGraph(FlowDag dag, FlowContext context, ExecutorService executorService, FlowTaskEngineRouter flowTaskEngineRouter, FlowEventBus flowEventBus) {
+    public CompletableFutureFlowExecuteGraph(FlowDag dag, FlowContext context, ExecutorService executorService, FlowTaskEngineRouter flowTaskEngineRouter) {
         this.dag = dag;
         this.context = context;
         this.executorService = executorService;
         this.flowTaskEngineRouter = flowTaskEngineRouter;
-        this.flowEventBus = flowEventBus;
     }
 
     /**
@@ -101,7 +100,7 @@ public class CompletableFutureFlowExecuteGraph {
     private CompletableFuture<Void> processQueue() {
         // 递归结束标识
         if (runningQueue.isEmpty()) {
-            System.out.println("[DEBUG_LOG] 队列为空,忽略本次执行 ");
+            LOGGER.info("队列为空,忽略本次执行");
             return CompletableFuture.completedFuture(null);
         }
 
@@ -118,7 +117,7 @@ public class CompletableFutureFlowExecuteGraph {
             queuedNodes.remove(currentNode.getId());
         }
 
-        System.out.println("[DEBUG_LOG] 当前队列中的节点数量: " + currentNodes.size());
+        LOGGER.info("当前队列中的节点数量: {}", currentNodes.size());
 
         // 遍历收集到的节点，检查哪些节点可以执行
         for (TaskNode node : currentNodes) {
@@ -128,24 +127,24 @@ public class CompletableFutureFlowExecuteGraph {
                     predecessors.stream().allMatch(pred -> completedNodes.contains(pred.getId()));
 
             if (allPredecessorsCompleted) {
-                System.out.println("[DEBUG_LOG] 节点准备好并发执行: " + node.getId());
+                LOGGER.info("节点准备好并发执行: {}", node.getId());
                 readyNodes.add(node);
             }
         }
 
         // 无法执行,结束当前的future
         if (readyNodes.isEmpty()) {
-            System.out.println("[DEBUG_LOG] 不满足执行条件,忽略本次执行 ");
+            LOGGER.info("不满足执行条件,忽略本次执行");
             return CompletableFuture.completedFuture(null);
         }
 
-        System.out.println("[DEBUG_LOG] 准备并发执行 " + readyNodes.size() + " 个节点");
+        LOGGER.info("准备并发执行 {} 个节点", readyNodes.size());
 
         // 并发执行所有准备好的节点
         List<CompletableFuture<Void>> futures = readyNodes.stream()
                 .map(node -> executeNode(node)
                         .thenComposeAsync(v -> {
-                            System.out.println("节点 " + node.getId() + " 处理完成，准备添加后继节点");
+                            LOGGER.info("节点 {} 处理完成，准备添加后继节点", node.getId());
                             // 标记当前节点为已完成
                             completedNodes.add(node.getId());
 
@@ -154,11 +153,11 @@ public class CompletableFutureFlowExecuteGraph {
                                 String successorId = successor.getId();
                                 // 只有当节点未完成且未在队列中时才添加
                                 if (!completedNodes.contains(successorId) && !queuedNodes.contains(successorId)) {
-                                    System.out.println("添加后继节点到队列: " + successorId);
+                                    LOGGER.info("添加后继节点到队列: {}", successorId);
                                     runningQueue.offer(successor);
                                     queuedNodes.add(successorId);
                                 } else {
-                                    System.out.println("[DEBUG_LOG] 跳过已在队列或已完成的节点: " + successorId);
+                                    LOGGER.info("跳过已在队列或已完成的节点: {}", successorId);
                                 }
                             }
                             return this.processQueue();
@@ -183,13 +182,13 @@ public class CompletableFutureFlowExecuteGraph {
         FlowTaskInstance instance = flowTaskEngineRouter.router(node, context);
 
         // 直接调用task instance的execute方法
-        System.out.println("[DEBUG_LOG] 并发执行节点: " + node.getId() + " 线程: " + Thread.currentThread().getName());
+        LOGGER.info("并发执行节点: {} 线程: {}", node.getId(), Thread.currentThread().getName());
         return instance.execute(node, context)
                 .whenComplete((r, v) -> {
-                    // 使用System.out确保在测试输出中可见
+                    // 记录执行完成时间和耗时
                     long endTime = System.currentTimeMillis();
-                    System.out.println("[DEBUG_LOG] 节点 " + node.getId() + " 执行完成 线程: " + Thread.currentThread().getName() +
-                            " 时间: " + endTime + " 耗时: " + (endTime - startTime) + "ms");
+                    LOGGER.info("节点 {} 执行完成 线程: {} 时间: {} 耗时: {}ms", 
+                            node.getId(), Thread.currentThread().getName(), endTime, (endTime - startTime));
                 });
     }
 
