@@ -45,6 +45,7 @@ public class TaskNode implements DataProvider {
     /**
      * 任务自身参数
      */
+    @Setter
     private JSONObject defineConfig;
     /**
      * 任务输入引用参数
@@ -86,6 +87,11 @@ public class TaskNode implements DataProvider {
     @Override
     public <T> T getData(DataKey<T> dataKey) {
         return defineConfig.getObject(dataKey.dataId, dataKey.clazz);
+    }
+
+    @Override
+    public <T> void setData(DataKey<T> key, T data) {
+        this.defineConfig.put(key.dataId, data);
     }
 
     @Override

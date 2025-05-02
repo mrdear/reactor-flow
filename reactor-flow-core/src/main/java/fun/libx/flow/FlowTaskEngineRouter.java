@@ -3,6 +3,9 @@ package fun.libx.flow;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.FlowTaskInstance;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 调度task路由
  * @author quding
@@ -25,6 +28,20 @@ public interface FlowTaskEngineRouter {
      */
     default FlowTaskInstance router(TaskNode node, FlowContext context) {
         return router(node);
+    }
+
+
+    class DefaultEnumRouter implements FlowTaskEngineRouter {
+        private final Map<TaskType, FlowTaskInstance> routerMap = new ConcurrentHashMap<>();
+
+        @Override
+        public FlowTaskInstance router(TaskNode node) {
+            return routerMap.get(node.getType());
+        }
+
+        public void register(TaskType type, FlowTaskInstance router){
+            routerMap.put(type, router);
+        }
     }
 
 }

@@ -22,5 +22,10 @@ public interface DataProvider {
         return data;
     }
 
-
+    /**
+     * 往容器中放入值
+     * @param key 值key
+     * @param data 值数据
+     */
+    <T> void setData(DataKey<T> key, T data);
 }

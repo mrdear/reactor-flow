@@ -8,6 +8,7 @@ import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.mvc.model.ExtendedFlowContext;
+import fun.libx.flow.mvc.task.TaskTypeEnum;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -42,18 +43,18 @@ public class FlowController {
     static {
         DAG = new FlowDag();
         // 创建任务节点
-        TaskNode startNode = createTaskNode("start", TaskType.START);
+        TaskNode startNode = createTaskNode("start", TaskTypeEnum.START);
 
         // 创建多个同级处理节点，这些节点将会并发执行
-        TaskNode processNode1 = createTaskNode("process1", TaskType.FAST);
-        TaskNode processNode2 = createTaskNode("process2", TaskType.DELAY);
+        TaskNode processNode1 = createTaskNode("process1", TaskTypeEnum.FAST);
+        TaskNode processNode2 = createTaskNode("process2", TaskTypeEnum.DELAY);
 
         // 创建第二层同级节点
-        TaskNode middleNode1 = createTaskNode("middle1", TaskType.DELAY);
-        TaskNode middleNode2 = createTaskNode("middle2", TaskType.FAST);
+        TaskNode middleNode1 = createTaskNode("middle1", TaskTypeEnum.DELAY);
+        TaskNode middleNode2 = createTaskNode("middle2", TaskTypeEnum.FAST);
 
-        TaskNode joinNode = createTaskNode("join", TaskType.FAST);
-        TaskNode endNode = createTaskNode("end", TaskType.END);
+        TaskNode joinNode = createTaskNode("join", TaskTypeEnum.FAST);
+        TaskNode endNode = createTaskNode("end", TaskTypeEnum.END);
 
         // 添加节点到DAG
         DAG.addTaskNode(startNode);

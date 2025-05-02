@@ -1,5 +1,7 @@
 package fun.libx.flow.common;
 
+import com.alibaba.fastjson2.JSONObject;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -59,5 +61,18 @@ public class DataKey<T> {
         return provider.getDataOr(this, defaultValue);
     }
 
+    /**
+     * 存放值
+     */
+    public void putData(DataProvider provider, T data) {
+        provider.setData(this, data);
+    }
+
+    /**
+     * 存放值
+     */
+    public void putData(JSONObject provider, T data) {
+        provider.put(dataId, data);
+    }
 
 }

@@ -5,11 +5,8 @@ package fun.libx.flow;
  * @author quding
  * @since 2025/4/27
  */
-public enum TaskType {
+public interface TaskType {
 
-    START,
-    END,
-    FAST,
-    DELAY,
+    String name();
 
 }
