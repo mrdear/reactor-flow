@@ -1,7 +1,7 @@
 package fun.libx.flow.mvc.controller;
 
 import com.alibaba.fastjson2.JSONObject;
-import fun.libx.flow.CompletableFutureFlowExecuteGraph;
+import fun.libx.flow.FlowFutureExecuteGraph;
 import fun.libx.flow.FlowTaskEngineRouter;
 import fun.libx.flow.TaskType;
 import fun.libx.flow.event.FlowEventBus;
@@ -10,12 +10,8 @@ import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.mvc.model.ExtendedFlowContext;
 import fun.libx.flow.mvc.task.TaskTypeEnum;
 import jakarta.annotation.Resource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -94,7 +90,7 @@ public class FlowController {
         context.setFlowId(UUID.randomUUID().toString());
 
         // Create and execute the flow
-        CompletableFutureFlowExecuteGraph graph = new CompletableFutureFlowExecuteGraph(
+        FlowFutureExecuteGraph graph = new FlowFutureExecuteGraph(
                 DAG, context, executorService, router);
 
         // Return the future directly

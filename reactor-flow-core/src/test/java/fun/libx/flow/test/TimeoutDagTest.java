@@ -1,9 +1,9 @@
 package fun.libx.flow.test;
 
 import com.alibaba.fastjson2.JSONObject;
-import fun.libx.flow.FlowFutureExecuteGraph;
 import fun.libx.flow.FlowContext;
 import fun.libx.flow.FlowDataKeys;
+import fun.libx.flow.FlowFutureExecuteGraph;
 import fun.libx.flow.FlowTaskEngineRouter;
 import fun.libx.flow.TaskType;
 import fun.libx.flow.TaskTypeEnum;
@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author quding
  * @since 2025/5/2
  */
-public class ExceptionDagTest {
+public class TimeoutDagTest {
 
     private static FlowTaskEngineRouter.DefaultEnumRouter router = new FlowTaskEngineRouter.DefaultEnumRouter();
 
@@ -40,16 +40,19 @@ public class ExceptionDagTest {
     }
 
     @Test
-    public void test_exceptionDag() {
+    public void test_timeoutDag() {
         FlowDag dag = new FlowDag();
         // 创建任务节点
         TaskNode startNode = createTaskNode("start", TaskTypeEnum.START);
-        TaskNode exceptionNode1 = createTaskNode("process1", TaskTypeEnum.EXCEPTION);
+
+        JSONObject nodeConfig = new JSONObject();
+        FlowDataKeys.NODE_TIMEOUT_SECOND.putData(nodeConfig, 2L);
+        TaskNode timeoutNode1 = createTaskNode("process1", TaskTypeEnum.TIMEOUT, nodeConfig);
         TaskNode endNode = createTaskNode("end", TaskTypeEnum.END);
 
         // 添加节点到DAG
         dag.addTaskNode(startNode);
-        dag.addTaskNode(exceptionNode1);
+        dag.addTaskNode(timeoutNode1);
         dag.addTaskNode(endNode);
 
         dag.addEdge("start", "process1");
@@ -79,12 +82,13 @@ public class ExceptionDagTest {
 
         JSONObject nodeConfig = new JSONObject();
         FlowDataKeys.NODE_IGNORE_EXCEPTION.putData(nodeConfig, true);
-        TaskNode exceptionNode1 = createTaskNode("process1", TaskTypeEnum.EXCEPTION, nodeConfig);
+        FlowDataKeys.NODE_TIMEOUT_SECOND.putData(nodeConfig, 2L);
+        TaskNode timeNode1 = createTaskNode("process1", TaskTypeEnum.TIMEOUT, nodeConfig);
         TaskNode endNode = createTaskNode("end", TaskTypeEnum.END);
 
         // 添加节点到DAG
         dag.addTaskNode(startNode);
-        dag.addTaskNode(exceptionNode1);
+        dag.addTaskNode(timeNode1);
         dag.addTaskNode(endNode);
 
         dag.addEdge("start", "process1");

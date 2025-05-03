@@ -4,6 +4,7 @@ import fun.libx.flow.exception.NodeException;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.FlowTaskInstance;
+import fun.libx.flow.task.TaskOutputResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +16,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 使用CompletableFuture实现的DAG执行图
@@ -24,9 +27,17 @@ import java.util.stream.Collectors;
  * @author quding
  * @since 2025/4/27
  */
-public class CompletableFutureFlowExecuteGraph {
+public class FlowFutureExecuteGraph {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(CompletableFutureFlowExecuteGraph.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlowFutureExecuteGraph.class);
+
+    // 用于检测超时线程池
+    static final ScheduledThreadPoolExecutor delayer;
+
+    static {
+        delayer = new ScheduledThreadPoolExecutor(1);
+        delayer.setRemoveOnCancelPolicy(true);
+    }
 
     /**
      * 绑定的DAG图
@@ -69,7 +80,7 @@ public class CompletableFutureFlowExecuteGraph {
      *
      * @param dag 要执行的DAG图
      */
-    public CompletableFutureFlowExecuteGraph(FlowDag dag, FlowContext context, ExecutorService executorService, FlowTaskEngineRouter flowTaskEngineRouter) {
+    public FlowFutureExecuteGraph(FlowDag dag, FlowContext context, ExecutorService executorService, FlowTaskEngineRouter flowTaskEngineRouter) {
         this.dag = dag;
         this.context = context;
         this.executorService = executorService;
@@ -200,7 +211,12 @@ public class CompletableFutureFlowExecuteGraph {
 
         // 直接调用task instance的execute方法
         LOGGER.info("并发执行节点: {} 线程: {}", node.getId(), Thread.currentThread().getName());
-        return instance.execute(node, context)
+        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(node, context);
+
+        // 定时监控
+        timeoutSchedule(node, executeFuture);
+
+        return executeFuture
                 .handle((result, throwable) -> {
                     // 正常情况
                     if (null == throwable) {
@@ -222,6 +238,20 @@ public class CompletableFutureFlowExecuteGraph {
                     LOGGER.info("节点 {} 执行完成,结果: {} 线程: {} 时间: {} 耗时: {}ms",
                             node.getId(), null == v, Thread.currentThread().getName(), endTime, (endTime - startTime));
                 });
+    }
+
+    /**
+     * 节点超时逻辑控制
+     */
+    private static void timeoutSchedule(TaskNode node, CompletableFuture<TaskOutputResult> executeFuture) {
+        Long timeout = FlowDataKeys.NODE_TIMEOUT_SECOND.getDataOr(node, 20L);
+
+        delayer.schedule(() -> {
+            if (executeFuture.isDone()) {
+                return;
+            }
+            executeFuture.completeExceptionally(new TimeoutException("task timeout"));
+        }, timeout, TimeUnit.SECONDS);
     }
 
 }

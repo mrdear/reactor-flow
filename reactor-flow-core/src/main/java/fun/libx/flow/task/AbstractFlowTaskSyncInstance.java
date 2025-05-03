@@ -5,6 +5,8 @@ import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 针对一些不方便包装为异步任务的链使用
@@ -13,14 +15,20 @@ import java.util.concurrent.CompletableFuture;
  */
 public abstract class AbstractFlowTaskSyncInstance extends AbstractTaskInstance {
 
-    public AbstractFlowTaskSyncInstance(FlowEventBus eventBus) {
+    protected ExecutorService executorService;
+
+    public AbstractFlowTaskSyncInstance(FlowEventBus eventBus, ExecutorService executorService) {
         super(eventBus);
+        this.executorService = executorService;
     }
 
     @Override
     protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
-        executeSync(taskNode, context, result);
-        return CompletableFuture.completedFuture(result);
+        // 需要异步化,杜绝同步等待
+        return CompletableFuture.supplyAsync(() -> {
+            executeSync(taskNode, context, result);
+            return result;
+        }, executorService);
     }
 
     /**

@@ -10,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
  * @author quding
  * @since 2025/5/1
  */
-public class ExceptionTaskInstance extends AbstractFlowTaskSyncInstance {
+public class ExceptionTaskInstance extends AbstractTaskInstance {
 
 
     public ExceptionTaskInstance(FlowEventBus eventBus) {
@@ -18,7 +18,7 @@ public class ExceptionTaskInstance extends AbstractFlowTaskSyncInstance {
     }
 
     @Override
-    void executeSync(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
         throw new RuntimeException("exception node");
     }
 
