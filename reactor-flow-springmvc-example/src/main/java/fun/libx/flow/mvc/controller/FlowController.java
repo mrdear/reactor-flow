@@ -108,6 +108,7 @@ public class FlowController {
         TaskNode node = new TaskNode();
         node.setId(id);
         node.setType(type);
+        node.setDefineConfig(new JSONObject());
         return node;
     }
 }

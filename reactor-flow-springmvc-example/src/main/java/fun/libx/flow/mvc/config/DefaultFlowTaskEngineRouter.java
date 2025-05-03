@@ -9,10 +9,16 @@ import fun.libx.flow.mvc.task.EndTaskInstance;
 import fun.libx.flow.mvc.task.FastTaskInstance;
 import fun.libx.flow.mvc.task.HttpDelayInstance;
 import fun.libx.flow.mvc.task.StartTaskInstance;
+import fun.libx.flow.mvc.task.TaskTypeEnum;
 import fun.libx.flow.task.FlowTaskInstance;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import static fun.libx.flow.mvc.task.TaskTypeEnum.DELAY;
+import static fun.libx.flow.mvc.task.TaskTypeEnum.END;
+import static fun.libx.flow.mvc.task.TaskTypeEnum.FAST;
+import static fun.libx.flow.mvc.task.TaskTypeEnum.START;
 
 /**
  * Default implementation of FlowTaskEngineRouter.
@@ -41,7 +47,6 @@ public class DefaultFlowTaskEngineRouter implements FlowTaskEngineRouter {
 
 
     @Override
-
     public FlowTaskInstance router(TaskNode node) {
         TaskType type = node.getType();
 
@@ -49,18 +54,13 @@ public class DefaultFlowTaskEngineRouter implements FlowTaskEngineRouter {
             throw new IllegalArgumentException("Task type cannot be null");
         }
 
-        switch (type) {
-            case START:
-                return startTaskInstance;
-            case END:
-                return endTaskInstance;
-            case FAST:
-                return fastTaskInstance;
-            case DELAY:
-                return httpDelayInstance;
-            default:
-                throw new IllegalArgumentException("Unsupported task type: " + type);
-        }
+        return switch (TaskTypeEnum.valueOf(type.name())) {
+            case START -> startTaskInstance;
+            case END -> endTaskInstance;
+            case FAST -> fastTaskInstance;
+            case DELAY -> httpDelayInstance;
+            default -> throw new IllegalArgumentException("Unsupported task type: " + type);
+        };
     }
 
     @Override

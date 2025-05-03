@@ -1,5 +1,6 @@
 package fun.libx.flow;
 
+import fun.libx.flow.common.CustomThreadFactory;
 import fun.libx.flow.exception.NodeException;
 import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
@@ -35,7 +36,7 @@ public class FlowFutureExecuteGraph {
     static final ScheduledThreadPoolExecutor delayer;
 
     static {
-        delayer = new ScheduledThreadPoolExecutor(1);
+        delayer = new ScheduledThreadPoolExecutor(1, new CustomThreadFactory("flow-delayer"));
         delayer.setRemoveOnCancelPolicy(true);
     }
 

@@ -1,5 +1,6 @@
 package fun.libx.flow.mvc.config;
 
+import fun.libx.flow.common.CustomThreadFactory;
 import fun.libx.flow.event.FlowEventBus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +37,7 @@ public class FlowEngineConfig {
      */
     @Bean
     public ExecutorService flowExecutorService() {
-        return Executors.newFixedThreadPool(2);
+        return Executors.newFixedThreadPool(1, new CustomThreadFactory("flow-scheduler"));
     }
 
 }
