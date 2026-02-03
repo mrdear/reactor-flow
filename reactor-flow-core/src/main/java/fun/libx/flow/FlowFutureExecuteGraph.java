@@ -17,9 +17,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 使用CompletableFuture实现的DAG执行图
@@ -53,28 +55,23 @@ public class FlowFutureExecuteGraph {
     /**
      * 线程池，用于执行任务
      */
-    private ExecutorService executorService;
+    private final ExecutorService executorService;
 
     /**
      * 任务分发器
      */
-    private FlowTaskEngineRouter flowTaskEngineRouter;
+    private final FlowTaskEngineRouter flowTaskEngineRouter;
 
     /**
-     * 存储已完成的节点
+     * 存储已完成的节点 (仅用于记录状态和日志，不参与核心流转控制)
      */
-    private Set<String> completedNodes = ConcurrentHashMap.newKeySet();
+    private final Set<String> completedNodes = ConcurrentHashMap.newKeySet();
 
     /**
-     * 存储已添加到队列的节点ID，防止重复添加
+     * 核心状态控制：存储节点当前的就绪前驱数量
+     * Key: NodeId, Value: 已完成的前驱数量
      */
-    private Set<String> queuedNodes = ConcurrentHashMap.newKeySet();
-
-    /**
-     * 使用队列进行BFS遍历
-     * 使用ConcurrentLinkedQueue确保线程安全
-     */
-    private Queue<TaskNode> runningQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentHashMap<String, AtomicInteger> joinState = new ConcurrentHashMap<>();
 
     /**
      * 构造函数
@@ -96,14 +93,11 @@ public class FlowFutureExecuteGraph {
     public CompletableFuture<Void> bfsExecute() {
         // 获取起始节点（没有前驱的节点）
         TaskNode startNode = dag.getStartingNode();
-        // 添加起始节点
-        runningQueue.offer(startNode);
-        queuedNodes.add(startNode.getId());
 
         // TODO 调度开始事件以及调度结束事件
 
         // 使用递归方式处理队列
-        return processQueue();
+        return executeNode(startNode);
     }
 
     /**
@@ -111,143 +105,92 @@ public class FlowFutureExecuteGraph {
      *
      * @return CompletableFuture<Void>
      */
-    private CompletableFuture<Void> processQueue() {
+    private CompletableFuture<Void> executeNode(TaskNode taskNode) {
 
         // 检查是否取消调度执行
         if (this.context.isCancellationTriggered()) {
             return CompletableFuture.completedFuture(null);
         }
 
-        // 递归结束标识
-        if (runningQueue.isEmpty()) {
-            LOGGER.info("队列为空,忽略本次执行");
-            return CompletableFuture.completedFuture(null);
-        }
-
-        // 收集当前队列中所有可以执行的节点
-        List<TaskNode> readyNodes = new ArrayList<>();
-
-        // 遍历队列中的所有节点，找出所有可以执行的节点
-        // 使用临时列表收集当前队列中的所有节点，避免在遍历过程中队列大小变化导致的问题
-        List<TaskNode> currentNodes = new ArrayList<>();
-        TaskNode currentNode;
-        while ((currentNode = runningQueue.poll()) != null) {
-            currentNodes.add(currentNode);
-            // 从queuedNodes中移除，因为节点已经从队列中取出
-            queuedNodes.remove(currentNode.getId());
-        }
-
-        LOGGER.info("当前队列中的节点数量: {}", currentNodes.size());
-
-        // 遍历收集到的节点，检查哪些节点可以执行
-        for (TaskNode node : currentNodes) {
-            // 检查当前节点的所有前驱是否已完成
-            Set<TaskNode> predecessors = node.getPredecessors();
-            boolean allPredecessorsCompleted = predecessors.isEmpty() ||
-                    predecessors.stream().allMatch(pred -> completedNodes.contains(pred.getId()));
-
-            if (allPredecessorsCompleted) {
-                LOGGER.info("节点准备好并发执行: {}", node.getId());
-                readyNodes.add(node);
-            }
-        }
-
-        // 无法执行,结束当前的future
-        if (readyNodes.isEmpty()) {
-            LOGGER.info("不满足执行条件,忽略本次执行");
-            return CompletableFuture.completedFuture(null);
-        }
-
-        LOGGER.info("准备并发执行 {} 个节点", readyNodes.size());
-
-        // 并发执行所有准备好的节点
-        List<CompletableFuture<Void>> futures = readyNodes.stream()
-                .map(node -> executeNode(node)
-                        .thenComposeAsync(v -> {
-                            // 检查是否已经取消
-                            if (context.isCancellationTriggered()) {
-                                return CompletableFuture.completedFuture(null);
-                            }
-
-                            LOGGER.info("节点 {} 处理完成，准备添加后继节点", node.getId());
-                            // 标记当前节点为已完成
-                            completedNodes.add(node.getId());
-
-                            // 将后继节点加入队列
-                            for (TaskNode successor : node.getSuccessors()) {
-                                String successorId = successor.getId();
-                                // 使用原子操作检查并添加节点，防止并发问题
-                                if (!completedNodes.contains(successorId) && queuedNodes.add(successorId)) {
-                                    LOGGER.info("添加后继节点到队列: {}", successorId);
-                                    runningQueue.offer(successor);
-                                } else {
-                                    LOGGER.info("跳过已在队列或已完成的节点: {}", successorId);
-                                }
-                            }
-                            return this.processQueue();
-                        }, executorService))
-                .toList();
-
-        // 等待所有节点执行完成
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-    }
-
-    /**
-     * 执行单个节点的任务
-     *
-     * @param node 要执行的节点
-     * @return CompletableFuture<Void>
-     */
-    private CompletableFuture<?> executeNode(TaskNode node) {
-        // 检查是否已经取消
-        if (context.isCancellationTriggered()) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        // 记录开始时间
+        // 2. 准备执行
         long startTime = System.currentTimeMillis();
+        FlowTaskInstance instance = flowTaskEngineRouter.router(taskNode, context);
 
-        // 寻找实例
-        FlowTaskInstance instance = flowTaskEngineRouter.router(node, context);
+        LOGGER.info("并发执行节点: {} 线程: {}", taskNode.getId(), Thread.currentThread().getName());
 
-        // 直接调用task instance的execute方法
-        LOGGER.info("并发执行节点: {} 线程: {}", node.getId(), Thread.currentThread().getName());
-        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(node, context);
+        // 3. 执行业务逻辑
+        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(taskNode, context);
+        // 4. 设置超时监控
+        ScheduledFuture<?> timeoutFuture = timeoutSchedule(taskNode, executeFuture);
 
-        // 定时监控
-        timeoutSchedule(node, executeFuture);
-
+        // 5. 链式处理结果与后续流转
         return executeFuture
                 .handle((result, throwable) -> {
-                    // 正常情况
+                    // 异常处理逻辑
                     if (null == throwable) {
                         return result;
                     }
-
-                    // 异常: 检查节点是否允许忽略异常
-                    if (FlowDataKeys.NODE_IGNORE_EXCEPTION.hasTureData(node)) {
+                    if (FlowDataKeys.NODE_IGNORE_EXCEPTION.hasTureData(taskNode)) {
+                        LOGGER.warn("节点 {} 发生异常但被忽略: {}", taskNode.getId(), throwable.getMessage());
                         return result;
                     }
-
-                    // 未配置,则取消调度,继续传递异常
+                    // 触发取消并抛出异常
                     context.triggerCancellation();
                     throw new NodeException("handle node failed", throwable);
-                })
-                .whenComplete((r, v) -> {
-                    // 记录执行完成时间和耗时
+                }).whenComplete((r, v) -> {
+                    // 清理超时任务
+                    timeoutFuture.cancel(false);
+
                     long endTime = System.currentTimeMillis();
-                    LOGGER.info("节点 {} 执行完成,结果: {} 线程: {} 时间: {} 耗时: {}ms",
-                            node.getId(), null == v, Thread.currentThread().getName(), endTime, (endTime - startTime));
-                });
+                    LOGGER.info("节点 {} 执行完成, 耗时: {}ms", taskNode.getId(), (endTime - startTime));
+                }).thenComposeAsync(v -> {
+                    // 如果已取消，不再触发后续
+                    if (context.isCancellationTriggered()) {
+                        return CompletableFuture.completedFuture(null);
+                    }
+
+                    // 记录完成状态
+                    completedNodes.add(taskNode.getId());
+
+                    // 6. 核心逻辑：触发后继节点
+                    List<CompletableFuture<Void>> successorFutures = new ArrayList<>();
+
+                    for (TaskNode successor : taskNode.getSuccessors()) {
+                        // 获取后继节点需要的总前驱数
+                        int totalPredecessors = successor.getPredecessors().size();
+
+                        // 原子操作：增加就绪计数器
+                        int readyCount = joinState.computeIfAbsent(successor.getId(), k -> new AtomicInteger(0))
+                                .incrementAndGet();
+
+                        // 只有当"就绪数 == 总数"的那个线程，才有资格触发执行
+                        if (readyCount == totalPredecessors) {
+                            LOGGER.info("节点 {} 前驱全部就绪 ({}/{})，触发执行", successor.getId(), readyCount, totalPredecessors);
+                            successorFutures.add(executeNode(successor));
+                        } else {
+                            // 其他前驱还没完成，或者已经由其他线程处理，当前线程无需操作
+                            LOGGER.debug("节点 {} 等待其他前驱 ({}/{})", successor.getId(), readyCount, totalPredecessors);
+                        }
+                    }
+
+                    // 如果当前节点是末端节点（无后继），或者后继节点都还没这就绪
+                    if (successorFutures.isEmpty()) {
+                        return CompletableFuture.completedFuture(null);
+                    }
+
+                    // 等待所有被触发的后续分支完成
+                    return CompletableFuture.allOf(successorFutures.toArray(new CompletableFuture[0]));
+                }, executorService);
     }
+
 
     /**
      * 节点超时逻辑控制
      */
-    private static void timeoutSchedule(TaskNode node, CompletableFuture<TaskOutputResult> executeFuture) {
+    private static ScheduledFuture<?> timeoutSchedule(TaskNode node, CompletableFuture<TaskOutputResult> executeFuture) {
         Long timeout = FlowDataKeys.NODE_TIMEOUT_SECOND.getDataOr(node, 20L);
 
-        delayer.schedule(() -> {
+        return delayer.schedule(() -> {
             if (executeFuture.isDone()) {
                 return;
             }

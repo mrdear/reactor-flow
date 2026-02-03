@@ -62,7 +62,7 @@ public class FlowController {
         DAG.addTaskNode(endNode);
 
         // 构建DAG的边
-        // 第一层：start -> process1-5 (这些节点将并发执行)
+        // 第一层：start -> process1-2 (这些节点将并发执行)
         DAG.addEdge("start", "process1");
         DAG.addEdge("start", "process2");
 

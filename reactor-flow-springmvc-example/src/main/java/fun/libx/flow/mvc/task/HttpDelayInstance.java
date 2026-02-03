@@ -82,6 +82,7 @@ public class HttpDelayInstance extends AbstractTaskInstance {
             }
 
         });
+
         return future;
     }
 

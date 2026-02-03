@@ -25,6 +25,8 @@ public class StartTaskInstance extends AbstractTaskInstance {
 
     @Override
     protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        // 处理逻辑
+
         return CompletableFuture.completedFuture(result);
     }
 
