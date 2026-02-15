@@ -6,22 +6,27 @@ import fun.libx.flow.model.FlowDag;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.FlowTaskInstance;
 import fun.libx.flow.task.TaskOutputResult;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * 使用CompletableFuture实现的DAG执行图
@@ -119,9 +124,7 @@ public class FlowFutureExecuteGraph {
         LOGGER.info("并发执行节点: {} 线程: {}", taskNode.getId(), Thread.currentThread().getName());
 
         // 3. 执行业务逻辑
-        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(taskNode, context);
-        // 4. 设置超时监控
-        ScheduledFuture<?> timeoutFuture = timeoutSchedule(taskNode, executeFuture);
+        CompletableFuture<TaskOutputResult> executeFuture = executeNodeWithRetry(taskNode, instance);
 
         // 5. 链式处理结果与后续流转
         return executeFuture
@@ -130,17 +133,15 @@ public class FlowFutureExecuteGraph {
                     if (null == throwable) {
                         return result;
                     }
+                    Throwable actualThrowable = unwrapThrowable(throwable);
                     if (FlowDataKeys.NODE_IGNORE_EXCEPTION.hasTureData(taskNode)) {
-                        LOGGER.warn("节点 {} 发生异常但被忽略: {}", taskNode.getId(), throwable.getMessage());
+                        LOGGER.warn("节点 {} 发生异常但被忽略: {}", taskNode.getId(), actualThrowable.getMessage());
                         return result;
                     }
                     // 触发取消并抛出异常
                     context.triggerCancellation();
-                    throw new NodeException("handle node failed", throwable);
+                    throw new NodeException("handle node failed", actualThrowable);
                 }).whenComplete((r, v) -> {
-                    // 清理超时任务
-                    timeoutFuture.cancel(false);
-
                     long endTime = System.currentTimeMillis();
                     LOGGER.info("节点 {} 执行完成, 耗时: {}ms", taskNode.getId(), (endTime - startTime));
                 }).thenComposeAsync(v -> {
@@ -183,6 +184,74 @@ public class FlowFutureExecuteGraph {
                 }, executorService);
     }
 
+    /**
+     * 带重试执行节点
+     */
+    private CompletableFuture<TaskOutputResult> executeNodeWithRetry(TaskNode taskNode, FlowTaskInstance instance) {
+        int maxAttempts = FlowDataKeys.NODE_RETRY_MAX_ATTEMPTS.getDataOr(taskNode, 1);
+        long waitMillis = FlowDataKeys.NODE_RETRY_WAIT_MILLIS.getDataOr(taskNode, 0L);
+        int normalizedAttempts = Math.max(1, maxAttempts);
+        long normalizedWaitMillis = Math.max(0L, waitMillis);
+
+        if (normalizedAttempts <= 1) {
+            return executeSingleAttempt(taskNode, instance);
+        }
+
+        RetryConfig retryConfig = RetryConfig.custom()
+                .maxAttempts(normalizedAttempts)
+                .waitDuration(Duration.ofMillis(normalizedWaitMillis))
+                .retryOnException(throwable -> shouldRetry(taskNode, throwable))
+                .build();
+        Retry retry = Retry.of("flow-node-" + taskNode.getId(), retryConfig);
+        retry.getEventPublisher().onRetry(event ->
+                LOGGER.warn("节点 {} 执行失败，准备进行第 {} 次尝试", taskNode.getId(), event.getNumberOfRetryAttempts() + 1));
+
+        Supplier<CompletionStage<TaskOutputResult>> retrySupplier = Retry.decorateCompletionStage(
+                retry,
+                delayer,
+                () -> {
+                    if (context.isCancellationTriggered()) {
+                        return CompletableFuture.failedFuture(new CancellationException("flow cancellation triggered"));
+                    }
+                    return executeSingleAttempt(taskNode, instance);
+                }
+        );
+        return retrySupplier.get().toCompletableFuture();
+    }
+
+    /**
+     * 执行单次尝试,每次尝试都绑定独立超时
+     */
+    private CompletableFuture<TaskOutputResult> executeSingleAttempt(TaskNode taskNode, FlowTaskInstance instance) {
+        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(taskNode, context);
+        ScheduledFuture<?> timeoutFuture = timeoutSchedule(taskNode, executeFuture);
+        return executeFuture.whenComplete((r, e) -> timeoutFuture.cancel(false));
+    }
+
+    /**
+     * 是否应该重试
+     */
+    private static boolean shouldRetry(TaskNode taskNode, Throwable throwable) {
+        Throwable actualThrowable = unwrapThrowable(throwable);
+        if (actualThrowable instanceof CancellationException) {
+            return false;
+        }
+        if ((actualThrowable instanceof TimeoutException) && !FlowDataKeys.NODE_RETRY_ON_TIMEOUT.getDataOr(taskNode, true)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 拆包CompletableFuture链路中的包装异常
+     */
+    private static Throwable unwrapThrowable(Throwable throwable) {
+        Throwable current = throwable;
+        while ((current instanceof CompletionException) && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
+    }
 
     /**
      * 节点超时逻辑控制
