@@ -38,13 +38,14 @@ public abstract class AbstractTaskInstance implements FlowTaskInstance {
 
             // 执行后事件
             return result.whenComplete((r, e) -> {
-                if (e != null && r.getException() == null) {
-                    r.setException(e);
+                TaskOutputResult finalResult = (r == null) ? taskOutputResult : r;
+                if (e != null && finalResult.getException() == null) {
+                    finalResult.setException(e);
                 }
 
                 NodeFinishEvent finishEvent = new NodeFinishEvent();
                 finishEvent.setTaskNode(taskNode);
-                finishEvent.setResult(r);
+                finishEvent.setResult(finalResult);
                 finishEvent.setEventDate(new Date());
                 eventBus.sendEvent(finishEvent);
             });
