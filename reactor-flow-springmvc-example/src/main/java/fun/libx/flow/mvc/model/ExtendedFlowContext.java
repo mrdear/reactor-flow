@@ -63,6 +63,16 @@ public class ExtendedFlowContext extends FlowContext {
         this.startTime = extendedChild.startTime;
         this.endTime = extendedChild.endTime;
     }
+
+    @Override
+    protected void resetCustomStateFrom(FlowContext sourceContext) {
+        if (!(sourceContext instanceof ExtendedFlowContext source)) {
+            return;
+        }
+        this.flowId = source.flowId;
+        this.startTime = source.startTime;
+        this.endTime = source.endTime;
+    }
     
     /**
      * Calculates the duration of the flow execution in milliseconds.

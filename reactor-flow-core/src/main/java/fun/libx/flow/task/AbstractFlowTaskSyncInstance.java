@@ -8,6 +8,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 针对一些不方便包装为异步任务的链使用
@@ -26,14 +27,17 @@ public abstract class AbstractFlowTaskSyncInstance extends AbstractTaskInstance 
     @Override
     protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
         CompletableFuture<TaskOutputResult> future = new CompletableFuture<>();
+        AtomicBoolean completedByWorker = new AtomicBoolean(false);
         Future<?> runningTask = executorService.submit(() -> {
             try {
                 if (context.isCancellationTriggered()) {
                     throw new CancellationException("flow cancellation triggered");
                 }
                 executeSync(taskNode, context, result);
+                completedByWorker.set(true);
                 future.complete(result);
             } catch (Throwable throwable) {
+                completedByWorker.set(true);
                 future.completeExceptionally(throwable);
             }
         });
@@ -45,7 +49,7 @@ public abstract class AbstractFlowTaskSyncInstance extends AbstractTaskInstance 
 
         future.whenComplete((r, e) -> {
             cancellationRegistration.unregister();
-            if (!runningTask.isDone()) {
+            if (!completedByWorker.get() && !runningTask.isDone()) {
                 runningTask.cancel(true);
             }
         });

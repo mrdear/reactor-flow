@@ -126,6 +126,32 @@ public class RetryDagTest {
         Assert.assertEquals(1, end.getExecuteCount());
     }
 
+    @Test
+    public void test_retry_should_not_merge_failed_attempt_context_state() {
+        FlowEventBus eventBus = new FlowEventBus();
+        WriteOnFailureThenSuccessTaskInstance process = new WriteOnFailureThenSuccessTaskInstance(eventBus);
+        CountingEndTaskInstance end = new CountingEndTaskInstance(eventBus);
+
+        FlowTaskEngineRouter.DefaultEnumRouter router = new FlowTaskEngineRouter.DefaultEnumRouter();
+        router.register(TaskTypeEnum.START, new StartTaskInstance(eventBus));
+        router.register(TaskTypeEnum.EXCEPTION, process);
+        router.register(TaskTypeEnum.END, end);
+
+        JSONObject processConfig = new JSONObject();
+        FlowDataKeys.NODE_RETRY_MAX_ATTEMPTS.putData(processConfig, 2);
+        FlowDataKeys.NODE_RETRY_WAIT_MILLIS.putData(processConfig, 10L);
+
+        FlowDag dag = buildSimpleDag(processConfig);
+        FlowContext context = new FlowContext();
+        FlowFutureExecuteGraph graph = new FlowFutureExecuteGraph(dag, context, Executors.newFixedThreadPool(2), router);
+
+        Throwable throwable = executeAndGetThrowable(graph, 10);
+        Assert.assertNull(throwable);
+        Assert.assertEquals(2, process.getAttempts());
+        Assert.assertEquals(1, end.getExecuteCount());
+        Assert.assertNull(context.getState("failedOnlyState"));
+    }
+
     private static FlowDag buildSimpleDag(JSONObject processConfig) {
         FlowDag dag = new FlowDag();
         TaskNode startNode = createTaskNode("start", TaskTypeEnum.START);
@@ -228,6 +254,29 @@ public class RetryDagTest {
 
         int getExecuteCount() {
             return executeCount.get();
+        }
+    }
+
+    private static class WriteOnFailureThenSuccessTaskInstance extends AbstractTaskInstance {
+        private final AtomicInteger attempts = new AtomicInteger(0);
+
+        private WriteOnFailureThenSuccessTaskInstance(FlowEventBus eventBus) {
+            super(eventBus);
+        }
+
+        @Override
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+            int attempt = attempts.incrementAndGet();
+            if (attempt == 1) {
+                context.putState("failedOnlyState", "from-first-failed-attempt");
+                throw new RuntimeException("first attempt failed");
+            }
+            result.setResult("ok");
+            return CompletableFuture.completedFuture(result);
+        }
+
+        int getAttempts() {
+            return attempts.get();
         }
     }
 }

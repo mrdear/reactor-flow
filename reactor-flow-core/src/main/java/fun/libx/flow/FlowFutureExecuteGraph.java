@@ -219,6 +219,8 @@ public class FlowFutureExecuteGraph {
                     if (nodeContext.isCancellationTriggered()) {
                         return CompletableFuture.failedFuture(new CancellationException("flow cancellation triggered"));
                     }
+                    // 每次重试前重置节点上下文，避免失败尝试残留脏数据被成功尝试合并
+                    nodeContext.resetFrom(context);
                     return executeSingleAttempt(taskNode, instance, nodeContext);
                 }
         );
