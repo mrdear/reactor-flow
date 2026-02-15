@@ -39,6 +39,30 @@ public class ExtendedFlowContext extends FlowContext {
     public ExtendedFlowContext() {
         this.startTime = System.currentTimeMillis();
     }
+
+    private ExtendedFlowContext(ExtendedFlowContext parent, String scope) {
+        super(parent, scope);
+        this.flowId = parent.flowId;
+        this.startTime = parent.startTime;
+        this.endTime = parent.endTime;
+    }
+
+    @Override
+    public FlowContext forkForNode(String nodeId) {
+        return new ExtendedFlowContext(this, nodeId);
+    }
+
+    @Override
+    protected void mergeCustomStateFrom(FlowContext childContext) {
+        if (!(childContext instanceof ExtendedFlowContext extendedChild)) {
+            return;
+        }
+        if (extendedChild.flowId != null) {
+            this.flowId = extendedChild.flowId;
+        }
+        this.startTime = extendedChild.startTime;
+        this.endTime = extendedChild.endTime;
+    }
     
     /**
      * Calculates the duration of the flow execution in milliseconds.
