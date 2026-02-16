@@ -4,9 +4,6 @@ import com.alibaba.fastjson2.JSONObject;
 import fun.libx.flow.TaskType;
 import fun.libx.flow.common.DataKey;
 import fun.libx.flow.common.DataProvider;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -21,7 +18,6 @@ public class TaskNode implements DataProvider {
     /**
      * 节点id
      */
-    @Getter
     private String id;
 
     /**
@@ -34,18 +30,14 @@ public class TaskNode implements DataProvider {
     /**
      * 任务名称
      */
-    @Getter
     private String taskName;
     /**
      * 任务类型
      */
-    @Getter
-    @Setter
     private TaskType type;
     /**
      * 任务自身参数
      */
-    @Setter
     private JSONObject defineConfig;
     /**
      * 任务输入引用参数
@@ -59,13 +51,11 @@ public class TaskNode implements DataProvider {
     /**
      * 前驱节点列表
      */
-    @Getter
     private Set<TaskNode> predecessors = new HashSet<>();
 
     /**
      * 后继节点列表
      */
-    @Getter
     private Set<TaskNode> successors = new HashSet<>();
 
     /**
@@ -82,6 +72,54 @@ public class TaskNode implements DataProvider {
      */
     public void addSuccessor(TaskNode successor) {
         successors.add(successor);
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public String getTaskName() {
+        return taskName;
+    }
+
+    public TaskType getType() {
+        return type;
+    }
+
+    public void setType(TaskType type) {
+        this.type = type;
+    }
+
+    public JSONObject getDefineConfig() {
+        return defineConfig;
+    }
+
+    public void setDefineConfig(JSONObject defineConfig) {
+        this.defineConfig = defineConfig;
+    }
+
+    public List<TaskInputParam> getInputConfig() {
+        return inputConfig;
+    }
+
+    public void setInputConfig(List<TaskInputParam> inputConfig) {
+        this.inputConfig = inputConfig;
+    }
+
+    public List<TaskOutputParam> getOutputConfig() {
+        return outputConfig;
+    }
+
+    public void setOutputConfig(List<TaskOutputParam> outputConfig) {
+        this.outputConfig = outputConfig;
+    }
+
+    public Set<TaskNode> getPredecessors() {
+        return predecessors;
+    }
+
+    public Set<TaskNode> getSuccessors() {
+        return successors;
     }
 
     @Override
