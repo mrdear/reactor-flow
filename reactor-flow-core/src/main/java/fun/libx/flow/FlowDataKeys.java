@@ -32,4 +32,34 @@ public final class FlowDataKeys {
      */
     public static final DataKey<Boolean> NODE_RETRY_ON_TIMEOUT = DataKey.of("NODE_RETRY_ON_TIMEOUT", Boolean.class);
 
+    /**
+     * agent节点system prompt
+     */
+    public static final DataKey<String> NODE_AGENT_SYSTEM_PROMPT = DataKey.of("NODE_AGENT_SYSTEM_PROMPT", String.class);
+
+    /**
+     * agent节点输入prompt
+     */
+    public static final DataKey<String> NODE_AGENT_PROMPT = DataKey.of("NODE_AGENT_PROMPT", String.class);
+
+    /**
+     * agent节点输入prompt在state中的key
+     */
+    public static final DataKey<String> NODE_AGENT_PROMPT_STATE_KEY = DataKey.of("NODE_AGENT_PROMPT_STATE_KEY", String.class);
+
+    /**
+     * agent节点输出结果写入state的key
+     */
+    public static final DataKey<String> NODE_AGENT_RESULT_STATE_KEY = DataKey.of("NODE_AGENT_RESULT_STATE_KEY", String.class);
+
+    /**
+     * agent节点消息历史写入state的key
+     */
+    public static final DataKey<String> NODE_AGENT_HISTORY_STATE_KEY = DataKey.of("NODE_AGENT_HISTORY_STATE_KEY", String.class);
+
+    /**
+     * agent节点最大轮次
+     */
+    public static final DataKey<Integer> NODE_AGENT_MAX_TURNS = DataKey.of("NODE_AGENT_MAX_TURNS", Integer.class);
+
 }

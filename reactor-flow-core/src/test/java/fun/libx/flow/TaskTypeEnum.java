@@ -13,5 +13,7 @@ public enum TaskTypeEnum implements TaskType {
     EXCEPTION,
 
     TIMEOUT,
+
+    AGENT,
     ;
 }

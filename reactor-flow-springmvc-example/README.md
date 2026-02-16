@@ -10,7 +10,7 @@ The Reactor Flow engine is a framework for executing directed acyclic graphs (DA
 
 - Spring Boot integration
 - REST API for executing flows
-- Support for different task types (START, FAST, DELAY, END)
+- Support for different task types (START, FAST, DELAY, AGENT, END)
 - Flow execution tracking with timing information
 
 ## Getting Started
@@ -70,6 +70,25 @@ Example response:
 }
 ```
 
+### Execute Agent Flow
+
+```
+GET /api/flow/execute-agent?prompt=hello%20agent
+```
+
+Executes a simple agent flow with START -> AGENT -> END nodes.
+
+Example response:
+```json
+{
+  "status": "completed",
+  "flowId": "550e8400-e29b-41d4-a716-446655440000",
+  "prompt": "hello agent",
+  "agentResult": "demo-agent final: echo_prompt => HELLO AGENT",
+  "agentHistorySize": 4
+}
+```
+
 ## Project Structure
 
 - `src/main/java/fun/libx/flow/mvc/Application.java`: Spring Boot application entry point
@@ -85,6 +104,7 @@ The following task types are supported:
 - `START`: Starting point of a flow
 - `FAST`: A task that executes quickly
 - `DELAY`: A task that has some delay (HTTP delay in this example)
+- `AGENT`: A task that runs the built-in agent loop and tools
 - `END`: Ending point of a flow
 
 ## Extending the Application
