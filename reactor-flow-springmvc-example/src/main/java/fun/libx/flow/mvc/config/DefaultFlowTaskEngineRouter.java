@@ -10,6 +10,7 @@ import fun.libx.flow.mvc.task.FastTaskInstance;
 import fun.libx.flow.mvc.task.HttpDelayInstance;
 import fun.libx.flow.mvc.task.StartTaskInstance;
 import fun.libx.flow.mvc.task.DemoAgentTaskInstance;
+import fun.libx.flow.mvc.task.OpenAiLlmTaskInstance;
 import fun.libx.flow.mvc.task.TaskTypeEnum;
 import fun.libx.flow.task.FlowTaskInstance;
 import jakarta.annotation.Resource;
@@ -21,6 +22,7 @@ import static fun.libx.flow.mvc.task.TaskTypeEnum.END;
 import static fun.libx.flow.mvc.task.TaskTypeEnum.FAST;
 import static fun.libx.flow.mvc.task.TaskTypeEnum.START;
 import static fun.libx.flow.mvc.task.TaskTypeEnum.AGENT;
+import static fun.libx.flow.mvc.task.TaskTypeEnum.LLM;
 
 /**
  * Default implementation of FlowTaskEngineRouter.
@@ -50,6 +52,9 @@ public class DefaultFlowTaskEngineRouter implements FlowTaskEngineRouter {
     @Resource
     private DemoAgentTaskInstance demoAgentTaskInstance;
 
+    @Resource
+    private OpenAiLlmTaskInstance openAiLlmTaskInstance;
+
 
     @Override
     public FlowTaskInstance router(TaskNode node) {
@@ -65,6 +70,7 @@ public class DefaultFlowTaskEngineRouter implements FlowTaskEngineRouter {
             case FAST -> fastTaskInstance;
             case DELAY -> httpDelayInstance;
             case AGENT -> demoAgentTaskInstance;
+            case LLM -> openAiLlmTaskInstance;
             default -> throw new IllegalArgumentException("Unsupported task type: " + type);
         };
     }

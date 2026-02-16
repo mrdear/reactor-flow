@@ -62,4 +62,44 @@ public final class FlowDataKeys {
      */
     public static final DataKey<Integer> NODE_AGENT_MAX_TURNS = DataKey.of("NODE_AGENT_MAX_TURNS", Integer.class);
 
+    /**
+     * llm节点输入prompt
+     */
+    public static final DataKey<String> NODE_LLM_PROMPT = DataKey.of("NODE_LLM_PROMPT", String.class);
+
+    /**
+     * llm节点输入prompt在state中的key
+     */
+    public static final DataKey<String> NODE_LLM_PROMPT_STATE_KEY = DataKey.of("NODE_LLM_PROMPT_STATE_KEY", String.class);
+
+    /**
+     * llm节点输出结果写入state的key
+     */
+    public static final DataKey<String> NODE_LLM_RESULT_STATE_KEY = DataKey.of("NODE_LLM_RESULT_STATE_KEY", String.class);
+
+    /**
+     * llm节点system prompt
+     */
+    public static final DataKey<String> NODE_LLM_SYSTEM_PROMPT = DataKey.of("NODE_LLM_SYSTEM_PROMPT", String.class);
+
+    /**
+     * llm节点模型
+     */
+    public static final DataKey<String> NODE_LLM_MODEL = DataKey.of("NODE_LLM_MODEL", String.class);
+
+    /**
+     * llm节点温度
+     */
+    public static final DataKey<Double> NODE_LLM_TEMPERATURE = DataKey.of("NODE_LLM_TEMPERATURE", Double.class);
+
+    /**
+     * llm节点最大输出token
+     */
+    public static final DataKey<Integer> NODE_LLM_MAX_TOKENS = DataKey.of("NODE_LLM_MAX_TOKENS", Integer.class);
+
+    /**
+     * llm节点apikey在state中的key
+     */
+    public static final DataKey<String> NODE_LLM_API_KEY_STATE_KEY = DataKey.of("NODE_LLM_API_KEY_STATE_KEY", String.class);
+
 }

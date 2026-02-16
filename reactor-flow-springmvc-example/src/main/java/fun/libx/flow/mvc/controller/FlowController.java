@@ -31,6 +31,8 @@ public class FlowController {
     private static final String AGENT_PROMPT_STATE_KEY = "agent.demo.prompt";
     private static final String AGENT_RESULT_STATE_KEY = "agent.demo.result";
     private static final String AGENT_HISTORY_STATE_KEY = "agent.demo.history";
+    private static final String LLM_PROMPT_STATE_KEY = "llm.demo.prompt";
+    private static final String LLM_RESULT_STATE_KEY = "llm.demo.result";
 
     @Resource
     private FlowTaskEngineRouter router;
@@ -41,6 +43,7 @@ public class FlowController {
 
     private static final FlowDag DAG;
     private static final FlowDag AGENT_DAG;
+    private static final FlowDag LLM_DAG;
     
     static {
         DAG = new FlowDag();
@@ -99,6 +102,24 @@ public class FlowController {
         AGENT_DAG.addTaskNode(agentEnd);
         AGENT_DAG.addEdge("agent-start", "agent-node");
         AGENT_DAG.addEdge("agent-node", "agent-end");
+
+        LLM_DAG = new FlowDag();
+        TaskNode llmStart = createTaskNode("llm-start", TaskTypeEnum.START);
+
+        JSONObject llmNodeConfig = new JSONObject();
+        FlowDataKeys.NODE_LLM_PROMPT_STATE_KEY.putData(llmNodeConfig, LLM_PROMPT_STATE_KEY);
+        FlowDataKeys.NODE_LLM_RESULT_STATE_KEY.putData(llmNodeConfig, LLM_RESULT_STATE_KEY);
+        FlowDataKeys.NODE_LLM_MODEL.putData(llmNodeConfig, "gpt-4o-mini");
+        FlowDataKeys.NODE_LLM_SYSTEM_PROMPT.putData(llmNodeConfig, "You are a concise assistant.");
+        FlowDataKeys.NODE_LLM_MAX_TOKENS.putData(llmNodeConfig, 512);
+        TaskNode llmNode = createTaskNode("llm-node", TaskTypeEnum.LLM, llmNodeConfig);
+        TaskNode llmEnd = createTaskNode("llm-end", TaskTypeEnum.END);
+
+        LLM_DAG.addTaskNode(llmStart);
+        LLM_DAG.addTaskNode(llmNode);
+        LLM_DAG.addTaskNode(llmEnd);
+        LLM_DAG.addEdge("llm-start", "llm-node");
+        LLM_DAG.addEdge("llm-node", "llm-end");
     }
     
     /**
@@ -154,6 +175,30 @@ public class FlowController {
                 historySize = listValue.size();
             }
             response.put("agentHistorySize", historySize);
+            return response;
+        });
+    }
+
+    /**
+     * Runs an OpenAI-backed llm node in the DAG pipeline.
+     */
+    @GetMapping("/execute-llm")
+    public CompletableFuture<JSONObject> executeLlmFlow(@RequestParam(value = "prompt", required = false) String prompt) {
+        ExtendedFlowContext context = new ExtendedFlowContext();
+        context.setFlowId(UUID.randomUUID().toString());
+
+        String normalizedPrompt = (prompt == null || prompt.trim().isEmpty()) ? "say hello from reactor-flow llm node" : prompt;
+        context.putState(LLM_PROMPT_STATE_KEY, normalizedPrompt);
+
+        FlowFutureExecuteGraph graph = new FlowFutureExecuteGraph(
+                LLM_DAG, context, executorService, router);
+
+        return graph.bfsExecute().thenApply(r -> {
+            JSONObject response = new JSONObject();
+            response.put("flowId", context.getFlowId());
+            response.put("status", "completed");
+            response.put("prompt", normalizedPrompt);
+            response.put("llmResult", context.getState(LLM_RESULT_STATE_KEY, String.class));
             return response;
         });
     }

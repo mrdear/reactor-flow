@@ -10,7 +10,7 @@ The Reactor Flow engine is a framework for executing directed acyclic graphs (DA
 
 - Spring Boot integration
 - REST API for executing flows
-- Support for different task types (START, FAST, DELAY, AGENT, END)
+- Support for different task types (START, FAST, DELAY, AGENT, LLM, END)
 - Flow execution tracking with timing information
 
 ## Getting Started
@@ -33,6 +33,12 @@ mvn spring-boot:run
 ```
 
 The application will start on port 8080 by default.
+
+Set OpenAI API key before using LLM endpoint:
+
+```bash
+export OPENAI_API_KEY=your_api_key
+```
 
 ## API Endpoints
 
@@ -89,6 +95,24 @@ Example response:
 }
 ```
 
+### Execute LLM Flow (OpenAI)
+
+```
+GET /api/flow/execute-llm?prompt=hello%20llm
+```
+
+Executes a simple LLM flow with START -> LLM -> END nodes.
+
+Example response:
+```json
+{
+  "status": "completed",
+  "flowId": "550e8400-e29b-41d4-a716-446655440000",
+  "prompt": "hello llm",
+  "llmResult": "Hello! ..."
+}
+```
+
 ## Project Structure
 
 - `src/main/java/fun/libx/flow/mvc/Application.java`: Spring Boot application entry point
@@ -105,6 +129,7 @@ The following task types are supported:
 - `FAST`: A task that executes quickly
 - `DELAY`: A task that has some delay (HTTP delay in this example)
 - `AGENT`: A task that runs the built-in agent loop and tools
+- `LLM`: A task that calls OpenAI Chat Completions
 - `END`: Ending point of a flow
 
 ## Extending the Application

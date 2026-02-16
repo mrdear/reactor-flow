@@ -17,5 +17,7 @@ public enum TaskTypeEnum implements TaskType {
     DELAY,
 
     AGENT,
+
+    LLM,
     ;
 }
