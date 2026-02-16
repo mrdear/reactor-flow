@@ -117,6 +117,9 @@ public class FlowFutureExecuteGraph {
             return CompletableFuture.completedFuture(null);
         }
 
+        // 节点级隔离context
+        NodeContext nodeContext = context.createNodeContext(taskNode.getId());
+
         // 2. 准备执行
         long startTime = System.currentTimeMillis();
         FlowTaskInstance instance = flowTaskEngineRouter.router(taskNode, context);
@@ -124,7 +127,7 @@ public class FlowFutureExecuteGraph {
         LOGGER.info("并发执行节点: {} 线程: {}", taskNode.getId(), Thread.currentThread().getName());
 
         // 3. 执行业务逻辑
-        CompletableFuture<TaskOutputResult> executeFuture = executeNodeWithRetry(taskNode, instance);
+        CompletableFuture<TaskOutputResult> executeFuture = executeNodeWithRetry(taskNode, instance, nodeContext);
 
         // 5. 链式处理结果与后续流转
         return executeFuture
@@ -142,6 +145,9 @@ public class FlowFutureExecuteGraph {
                     context.triggerCancellation();
                     throw new NodeException("handle node failed", actualThrowable);
                 }).whenComplete((r, v) -> {
+                    if (v == null) {
+                        context.mergeFrom(nodeContext);
+                    }
                     long endTime = System.currentTimeMillis();
                     LOGGER.info("节点 {} 执行完成, 耗时: {}ms", taskNode.getId(), (endTime - startTime));
                 }).thenComposeAsync(v -> {
@@ -187,14 +193,14 @@ public class FlowFutureExecuteGraph {
     /**
      * 带重试执行节点
      */
-    private CompletableFuture<TaskOutputResult> executeNodeWithRetry(TaskNode taskNode, FlowTaskInstance instance) {
+    private CompletableFuture<TaskOutputResult> executeNodeWithRetry(TaskNode taskNode, FlowTaskInstance instance, NodeContext nodeContext) {
         int maxAttempts = FlowDataKeys.NODE_RETRY_MAX_ATTEMPTS.getDataOr(taskNode, 1);
         long waitMillis = FlowDataKeys.NODE_RETRY_WAIT_MILLIS.getDataOr(taskNode, 0L);
         int normalizedAttempts = Math.max(1, maxAttempts);
         long normalizedWaitMillis = Math.max(0L, waitMillis);
 
         if (normalizedAttempts <= 1) {
-            return executeSingleAttempt(taskNode, instance);
+            return executeSingleAttempt(taskNode, instance, nodeContext);
         }
 
         RetryConfig retryConfig = RetryConfig.custom()
@@ -210,10 +216,12 @@ public class FlowFutureExecuteGraph {
                 retry,
                 delayer,
                 () -> {
-                    if (context.isCancellationTriggered()) {
+                    if (nodeContext.isCancellationTriggered()) {
                         return CompletableFuture.failedFuture(new CancellationException("flow cancellation triggered"));
                     }
-                    return executeSingleAttempt(taskNode, instance);
+                    // 每次重试前重置节点上下文，避免失败尝试残留脏数据被成功尝试合并
+                    nodeContext.resetFromFlowContext();
+                    return executeSingleAttempt(taskNode, instance, nodeContext);
                 }
         );
         return retrySupplier.get().toCompletableFuture();
@@ -222,8 +230,8 @@ public class FlowFutureExecuteGraph {
     /**
      * 执行单次尝试,每次尝试都绑定独立超时
      */
-    private CompletableFuture<TaskOutputResult> executeSingleAttempt(TaskNode taskNode, FlowTaskInstance instance) {
-        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(taskNode, context);
+    private CompletableFuture<TaskOutputResult> executeSingleAttempt(TaskNode taskNode, FlowTaskInstance instance, NodeContext nodeContext) {
+        CompletableFuture<TaskOutputResult> executeFuture = instance.execute(taskNode, nodeContext);
         ScheduledFuture<?> timeoutFuture = timeoutSchedule(taskNode, executeFuture);
         return executeFuture.whenComplete((r, e) -> timeoutFuture.cancel(false));
     }

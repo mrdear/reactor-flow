@@ -1,6 +1,6 @@
 package fun.libx.flow.task;
 
-import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.event.model.NodeFinishEvent;
 import fun.libx.flow.event.model.NodeStartEvent;
@@ -22,7 +22,7 @@ public abstract class AbstractTaskInstance implements FlowTaskInstance {
     }
 
     @Override
-    public CompletableFuture<TaskOutputResult> execute(TaskNode taskNode, FlowContext context) {
+    public CompletableFuture<TaskOutputResult> execute(TaskNode taskNode, NodeContext context) {
         // 发出开始执行事件
         NodeStartEvent event = new NodeStartEvent();
         event.setTaskNode(taskNode);
@@ -70,9 +70,9 @@ public abstract class AbstractTaskInstance implements FlowTaskInstance {
     /**
      * 内部执行逻辑
      * @param taskNode 节点类
-     * @param context 调度上下文
+     * @param context 节点上下文
      * @return 调度future
      */
-    abstract protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result);
+    abstract protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result);
 
 }

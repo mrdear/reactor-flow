@@ -1,6 +1,6 @@
 package fun.libx.flow.mvc.task;
 
-import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.AbstractTaskInstance;
@@ -18,7 +18,9 @@ import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 /**
  * 延迟节点
@@ -58,12 +60,12 @@ public class HttpDelayInstance extends AbstractTaskInstance {
     }
 
     @Override
-    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
         CompletableFuture<TaskOutputResult> future = new CompletableFuture<>();
 
         // 使用较短的延迟时间以便于测试
         SimpleHttpRequest request = SimpleRequestBuilder.get("https://httpbin.org/delay/5").build();
-        CLIENT.execute(request, new FutureCallback<SimpleHttpResponse>() {
+        Future<SimpleHttpResponse> requestFuture = CLIENT.execute(request, new FutureCallback<SimpleHttpResponse>() {
             @Override
             public void completed(SimpleHttpResponse simpleHttpResponse) {
                 String bodyText = simpleHttpResponse.getBodyText();
@@ -82,6 +84,12 @@ public class HttpDelayInstance extends AbstractTaskInstance {
             }
 
         });
+
+        var cancellationRegistration = context.registerCancellationAction(() -> {
+            requestFuture.cancel(true);
+            future.completeExceptionally(new CancellationException("flow cancellation triggered"));
+        });
+        future.whenComplete((r, e) -> cancellationRegistration.unregister());
 
         return future;
     }

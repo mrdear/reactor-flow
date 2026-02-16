@@ -1,12 +1,14 @@
 package fun.libx.flow.task;
 
-import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 针对一些不方便包装为异步任务的链使用
@@ -23,12 +25,35 @@ public abstract class AbstractFlowTaskSyncInstance extends AbstractTaskInstance 
     }
 
     @Override
-    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
-        // 需要异步化,杜绝同步等待
-        return CompletableFuture.supplyAsync(() -> {
-            executeSync(taskNode, context, result);
-            return result;
-        }, executorService);
+    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
+        CompletableFuture<TaskOutputResult> future = new CompletableFuture<>();
+        AtomicBoolean completedByWorker = new AtomicBoolean(false);
+        Future<?> runningTask = executorService.submit(() -> {
+            try {
+                if (context.isCancellationTriggered()) {
+                    throw new CancellationException("flow cancellation triggered");
+                }
+                executeSync(taskNode, context, result);
+                completedByWorker.set(true);
+                future.complete(result);
+            } catch (Throwable throwable) {
+                completedByWorker.set(true);
+                future.completeExceptionally(throwable);
+            }
+        });
+
+        var cancellationRegistration = context.registerCancellationAction(() -> {
+            runningTask.cancel(true);
+            future.completeExceptionally(new CancellationException("flow cancellation triggered"));
+        });
+
+        future.whenComplete((r, e) -> {
+            cancellationRegistration.unregister();
+            if (!completedByWorker.get() && !runningTask.isDone()) {
+                runningTask.cancel(true);
+            }
+        });
+        return future;
     }
 
     /**
@@ -36,6 +61,6 @@ public abstract class AbstractFlowTaskSyncInstance extends AbstractTaskInstance 
      * @param taskNode 对应的节点
      * @param context 对应的上下文
      */
-    abstract void executeSync(TaskNode taskNode, FlowContext context, TaskOutputResult result);
+    abstract void executeSync(TaskNode taskNode, NodeContext context, TaskOutputResult result);
 
 }
