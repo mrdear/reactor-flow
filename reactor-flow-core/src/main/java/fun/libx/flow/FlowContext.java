@@ -19,12 +19,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
+ * Flow级别调度上下文（全局共享）
+ *
  * @author quding
  * @since 2025/4/27
  */
 public class FlowContext {
-
-    private static final String ROOT_SCOPE = "__root__";
 
     /**
      * flow级别共享取消状态与取消动作注册表
@@ -32,126 +32,60 @@ public class FlowContext {
     private final CancellationRegistry cancellationRegistry;
 
     /**
-     * 当前context归属范围(root/nodeId)
-     */
-    private final String scope;
-
-    /**
-     * context状态数据
+     * flow全局状态（节点执行前会拷贝到NodeContext）
      */
     private final ConcurrentHashMap<String, Object> state;
 
     /**
-     * 当前context改动过的key，用于merge增量合并
-     */
-    private final Set<String> dirtyStateKeys = ConcurrentHashMap.newKeySet();
-
-    /**
-     * 创建root context
+     * 创建root flow context
      */
     public FlowContext() {
-        this(new CancellationRegistry(), ROOT_SCOPE, new ConcurrentHashMap<>());
+        this(new CancellationRegistry(), new ConcurrentHashMap<>());
     }
 
-    /**
-     * 创建子context
-     */
-    protected FlowContext(FlowContext parent, String scope) {
-        this(
-                parent.cancellationRegistry,
-                normalizeScope(scope),
-                copyStateMap(parent.state)
-        );
-        parent.copyCustomStateTo(this);
-    }
-
-    private FlowContext(CancellationRegistry cancellationRegistry, String scope, ConcurrentHashMap<String, Object> state) {
+    private FlowContext(CancellationRegistry cancellationRegistry, ConcurrentHashMap<String, Object> state) {
         this.cancellationRegistry = cancellationRegistry;
-        this.scope = scope;
         this.state = state;
     }
 
-    private static String normalizeScope(String scope) {
-        if (scope == null || scope.trim().isEmpty()) {
-            return ROOT_SCOPE;
-        }
-        return scope;
+    /**
+     * 创建节点上下文（用于单个节点执行）
+     */
+    public NodeContext createNodeContext(String nodeId) {
+        return new NodeContext(this, nodeId, copyStateForNode());
     }
 
     /**
-     * 为节点创建隔离context
+     * 将节点执行结果合并到FlowContext
      */
-    public FlowContext forkForNode(String nodeId) {
-        return new FlowContext(this, nodeId);
-    }
-
-    /**
-     * 子context执行完成后合并回主context
-     */
-    public synchronized void mergeFrom(FlowContext nodeContext) {
-        if (nodeContext == null || nodeContext == this) {
+    public synchronized void mergeFrom(NodeContext nodeContext) {
+        if (nodeContext == null) {
             return;
         }
 
-        for (String key : nodeContext.dirtyStateKeys) {
-            if (nodeContext.state.containsKey(key)) {
-                this.state.put(key, cloneStateValue(nodeContext.state.get(key)));
+        for (String key : nodeContext.dirtyStateKeysSnapshot()) {
+            if (nodeContext.containsStateKey(key)) {
+                this.state.put(key, cloneStateValue(nodeContext.stateValue(key)));
             } else {
                 this.state.remove(key);
             }
         }
-        mergeCustomStateFrom(nodeContext);
+    }
+
+    ConcurrentHashMap<String, Object> copyStateForNode() {
+        return copyStateMap(state);
     }
 
     /**
-     * 可覆盖: 将子类扩展字段从当前context复制到子context
-     */
-    protected void copyCustomStateTo(FlowContext childContext) {
-        // no-op
-    }
-
-    /**
-     * 可覆盖: 合并子类扩展字段
-     */
-    protected void mergeCustomStateFrom(FlowContext childContext) {
-        // no-op
-    }
-
-    /**
-     * 可覆盖: 重试前将子类扩展字段重置到主context最新值
-     */
-    protected void resetCustomStateFrom(FlowContext sourceContext) {
-        // no-op
-    }
-
-    /**
-     * 在重试前重置节点context，避免失败尝试的脏状态影响成功尝试
-     */
-    synchronized void resetFrom(FlowContext sourceContext) {
-        if (sourceContext == null || sourceContext == this) {
-            return;
-        }
-        this.state.clear();
-        this.state.putAll(copyStateMap(sourceContext.state));
-        this.dirtyStateKeys.clear();
-        resetCustomStateFrom(sourceContext);
-    }
-
-    public String getScope() {
-        return scope;
-    }
-
-    /**
-     * 写入状态
+     * 写入flow状态
      */
     public void putState(String key, Object value) {
         String normalizedKey = Objects.requireNonNull(key, "state key cannot be null");
         state.put(normalizedKey, cloneStateValue(value));
-        dirtyStateKeys.add(normalizedKey);
     }
 
     /**
-     * 读取状态
+     * 读取flow状态
      */
     public Object getState(String key) {
         if (key == null) {
@@ -161,7 +95,7 @@ public class FlowContext {
     }
 
     /**
-     * 按类型读取状态
+     * 按类型读取flow状态
      */
     public <T> T getState(String key, Class<T> type) {
         Object value = getState(key);
@@ -176,7 +110,7 @@ public class FlowContext {
     }
 
     /**
-     * 读取状态，不存在则返回默认值
+     * 读取flow状态，不存在则返回默认值
      */
     public <T> T getStateOrDefault(String key, Class<T> type, T defaultValue) {
         T value = getState(key, type);
@@ -184,18 +118,17 @@ public class FlowContext {
     }
 
     /**
-     * 删除状态
+     * 删除flow状态
      */
     public Object removeState(String key) {
         if (key == null) {
             return null;
         }
-        dirtyStateKeys.add(key);
         return state.remove(key);
     }
 
     /**
-     * 获取状态快照
+     * 获取flow状态快照
      */
     public Map<String, Object> snapshotState() {
         return Collections.unmodifiableMap(copyStateMap(state));
@@ -318,14 +251,14 @@ public class FlowContext {
         }
     }
 
-    private static ConcurrentHashMap<String, Object> copyStateMap(Map<String, Object> sourceState) {
+    static ConcurrentHashMap<String, Object> copyStateMap(Map<String, Object> sourceState) {
         ConcurrentHashMap<String, Object> copied = new ConcurrentHashMap<>();
         sourceState.forEach((key, value) -> copied.put(key, cloneStateValue(value)));
         return copied;
     }
 
     @SuppressWarnings("unchecked")
-    private static Object cloneStateValue(Object value) {
+    static Object cloneStateValue(Object value) {
         if (value == null || isKnownImmutable(value)) {
             return value;
         }

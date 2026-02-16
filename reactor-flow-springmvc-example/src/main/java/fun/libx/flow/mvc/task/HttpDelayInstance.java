@@ -1,6 +1,6 @@
 package fun.libx.flow.mvc.task;
 
-import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.AbstractTaskInstance;
@@ -60,7 +60,7 @@ public class HttpDelayInstance extends AbstractTaskInstance {
     }
 
     @Override
-    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+    protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
         CompletableFuture<TaskOutputResult> future = new CompletableFuture<>();
 
         // 使用较短的延迟时间以便于测试
@@ -85,7 +85,7 @@ public class HttpDelayInstance extends AbstractTaskInstance {
 
         });
 
-        FlowContext.CancellationRegistration cancellationRegistration = context.registerCancellationAction(() -> {
+        var cancellationRegistration = context.registerCancellationAction(() -> {
             requestFuture.cancel(true);
             future.completeExceptionally(new CancellationException("flow cancellation triggered"));
         });

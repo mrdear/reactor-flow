@@ -118,11 +118,11 @@ public class FlowFutureExecuteGraph {
         }
 
         // 节点级隔离context
-        FlowContext nodeContext = context.forkForNode(taskNode.getId());
+        NodeContext nodeContext = context.createNodeContext(taskNode.getId());
 
         // 2. 准备执行
         long startTime = System.currentTimeMillis();
-        FlowTaskInstance instance = flowTaskEngineRouter.router(taskNode, nodeContext);
+        FlowTaskInstance instance = flowTaskEngineRouter.router(taskNode, context);
 
         LOGGER.info("并发执行节点: {} 线程: {}", taskNode.getId(), Thread.currentThread().getName());
 
@@ -193,7 +193,7 @@ public class FlowFutureExecuteGraph {
     /**
      * 带重试执行节点
      */
-    private CompletableFuture<TaskOutputResult> executeNodeWithRetry(TaskNode taskNode, FlowTaskInstance instance, FlowContext nodeContext) {
+    private CompletableFuture<TaskOutputResult> executeNodeWithRetry(TaskNode taskNode, FlowTaskInstance instance, NodeContext nodeContext) {
         int maxAttempts = FlowDataKeys.NODE_RETRY_MAX_ATTEMPTS.getDataOr(taskNode, 1);
         long waitMillis = FlowDataKeys.NODE_RETRY_WAIT_MILLIS.getDataOr(taskNode, 0L);
         int normalizedAttempts = Math.max(1, maxAttempts);
@@ -220,7 +220,7 @@ public class FlowFutureExecuteGraph {
                         return CompletableFuture.failedFuture(new CancellationException("flow cancellation triggered"));
                     }
                     // 每次重试前重置节点上下文，避免失败尝试残留脏数据被成功尝试合并
-                    nodeContext.resetFrom(context);
+                    nodeContext.resetFromFlowContext();
                     return executeSingleAttempt(taskNode, instance, nodeContext);
                 }
         );
@@ -230,7 +230,7 @@ public class FlowFutureExecuteGraph {
     /**
      * 执行单次尝试,每次尝试都绑定独立超时
      */
-    private CompletableFuture<TaskOutputResult> executeSingleAttempt(TaskNode taskNode, FlowTaskInstance instance, FlowContext nodeContext) {
+    private CompletableFuture<TaskOutputResult> executeSingleAttempt(TaskNode taskNode, FlowTaskInstance instance, NodeContext nodeContext) {
         CompletableFuture<TaskOutputResult> executeFuture = instance.execute(taskNode, nodeContext);
         ScheduledFuture<?> timeoutFuture = timeoutSchedule(taskNode, executeFuture);
         return executeFuture.whenComplete((r, e) -> timeoutFuture.cancel(false));

@@ -2,6 +2,7 @@ package fun.libx.flow.test;
 
 import com.alibaba.fastjson2.JSONObject;
 import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.FlowFutureExecuteGraph;
 import fun.libx.flow.FlowTaskEngineRouter;
 import fun.libx.flow.TaskType;
@@ -153,7 +154,7 @@ public class NodeContextIsolationDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             return CompletableFuture.supplyAsync(() -> {
                 context.putState("sharedValue", "writer");
                 writerUpdatedContext.countDown();
@@ -184,7 +185,7 @@ public class NodeContextIsolationDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             return CompletableFuture.supplyAsync(() -> {
                 try {
                     writerUpdatedContext.await(2, TimeUnit.SECONDS);
@@ -211,7 +212,7 @@ public class NodeContextIsolationDagTest {
 
         @SuppressWarnings("unchecked")
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             return CompletableFuture.supplyAsync(() -> {
                 List<String> listValue = (List<String>) context.getState("sharedList");
                 listValue.add("writer");
@@ -244,7 +245,7 @@ public class NodeContextIsolationDagTest {
 
         @SuppressWarnings("unchecked")
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             return CompletableFuture.supplyAsync(() -> {
                 try {
                     writerMutatedList.await(2, TimeUnit.SECONDS);

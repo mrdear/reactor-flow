@@ -1,6 +1,6 @@
 package fun.libx.flow.task;
 
-import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 
@@ -19,7 +19,7 @@ public class TimeoutTaskInstance extends AbstractFlowTaskSyncInstance {
     }
 
     @Override
-    void executeSync(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+    void executeSync(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {

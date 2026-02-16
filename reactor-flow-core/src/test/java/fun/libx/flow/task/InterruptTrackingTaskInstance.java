@@ -1,6 +1,6 @@
 package fun.libx.flow.task;
 
-import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 
@@ -23,7 +23,7 @@ public class InterruptTrackingTaskInstance extends AbstractFlowTaskSyncInstance 
     }
 
     @Override
-    void executeSync(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+    void executeSync(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
         started.countDown();
         try {
             Thread.sleep(10000L);

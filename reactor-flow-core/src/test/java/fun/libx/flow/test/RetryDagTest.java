@@ -2,6 +2,7 @@ package fun.libx.flow.test;
 
 import com.alibaba.fastjson2.JSONObject;
 import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.FlowDataKeys;
 import fun.libx.flow.FlowFutureExecuteGraph;
 import fun.libx.flow.FlowTaskEngineRouter;
@@ -203,7 +204,7 @@ public class RetryDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             int attempt = attempts.incrementAndGet();
             if (attempt <= failTimes) {
                 throw new RuntimeException("flaky exception");
@@ -225,7 +226,7 @@ public class RetryDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             int attempt = attempts.incrementAndGet();
             if (attempt == 1) {
                 return new CompletableFuture<>();
@@ -247,7 +248,7 @@ public class RetryDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             executeCount.incrementAndGet();
             return CompletableFuture.completedFuture(result);
         }
@@ -265,7 +266,7 @@ public class RetryDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             int attempt = attempts.incrementAndGet();
             if (attempt == 1) {
                 context.putState("failedOnlyState", "from-first-failed-attempt");

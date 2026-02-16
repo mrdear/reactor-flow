@@ -2,6 +2,7 @@ package fun.libx.flow.test;
 
 import com.alibaba.fastjson2.JSONObject;
 import fun.libx.flow.FlowContext;
+import fun.libx.flow.NodeContext;
 import fun.libx.flow.FlowFutureExecuteGraph;
 import fun.libx.flow.FlowTaskEngineRouter;
 import fun.libx.flow.TaskType;
@@ -96,7 +97,7 @@ public class CancellationDagTest {
         }
 
         @Override
-        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, FlowContext context, TaskOutputResult result) {
+        protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
             return CompletableFuture.supplyAsync(() -> {
                 try {
                     slowNode.awaitStarted(2, TimeUnit.SECONDS);
