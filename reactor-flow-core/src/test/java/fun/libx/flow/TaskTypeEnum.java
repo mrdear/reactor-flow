@@ -15,5 +15,7 @@ public enum TaskTypeEnum implements TaskType {
     TIMEOUT,
 
     AGENT,
+
+    LLM,
     ;
 }

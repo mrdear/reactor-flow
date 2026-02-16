@@ -3,18 +3,16 @@ package fun.libx.flow.mvc.config;
 import fun.libx.flow.FlowContext;
 import fun.libx.flow.FlowTaskEngineRouter;
 import fun.libx.flow.TaskType;
-import fun.libx.flow.event.FlowEventBus;
+import fun.libx.flow.llm.OpenAiLlmTaskInstance;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.mvc.task.EndTaskInstance;
 import fun.libx.flow.mvc.task.FastTaskInstance;
 import fun.libx.flow.mvc.task.HttpDelayInstance;
 import fun.libx.flow.mvc.task.StartTaskInstance;
 import fun.libx.flow.mvc.task.DemoAgentTaskInstance;
-import fun.libx.flow.mvc.task.OpenAiLlmTaskInstance;
 import fun.libx.flow.mvc.task.TaskTypeEnum;
 import fun.libx.flow.task.FlowTaskInstance;
 import jakarta.annotation.Resource;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import static fun.libx.flow.mvc.task.TaskTypeEnum.DELAY;
@@ -33,9 +31,6 @@ import static fun.libx.flow.mvc.task.TaskTypeEnum.LLM;
  */
 @Component
 public class DefaultFlowTaskEngineRouter implements FlowTaskEngineRouter {
-
-    @Resource
-    private FlowEventBus eventBus;
 
     @Resource
     private StartTaskInstance startTaskInstance;

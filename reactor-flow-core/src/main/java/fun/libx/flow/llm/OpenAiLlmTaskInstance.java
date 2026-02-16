@@ -1,17 +1,14 @@
-package fun.libx.flow.mvc.task;
+package fun.libx.flow.llm;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import fun.libx.flow.FlowDataKeys;
 import fun.libx.flow.FlowContext;
+import fun.libx.flow.FlowDataKeys;
 import fun.libx.flow.NodeContext;
 import fun.libx.flow.event.FlowEventBus;
 import fun.libx.flow.model.TaskNode;
 import fun.libx.flow.task.AbstractTaskInstance;
 import fun.libx.flow.task.TaskOutputResult;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,44 +22,52 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * OpenAI LLM节点实现（单轮对话）。
+ * OpenAI Chat Completions单轮LLM节点实现。
  */
-@Component
 public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
+
+    public static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
+    public static final String DEFAULT_MODEL = "gpt-4o-mini";
+    public static final double DEFAULT_TEMPERATURE = 0.2d;
+    public static final int DEFAULT_MAX_TOKENS = 512;
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    @Value("${openai.base-url:https://api.openai.com/v1}")
-    private String openAiBaseUrl;
+    private final String openAiBaseUrl;
+    private final String openAiApiKey;
+    private final String defaultModel;
+    private final double defaultTemperature;
+    private final int defaultMaxTokens;
 
-    @Value("${openai.api-key:}")
-    private String openAiApiKey;
+    public OpenAiLlmTaskInstance(FlowEventBus eventBus, String apiKey) {
+        this(eventBus, DEFAULT_BASE_URL, apiKey, DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS);
+    }
 
-    @Value("${openai.default-model:gpt-4o-mini}")
-    private String defaultModel;
-
-    @Value("${openai.default-temperature:0.2}")
-    private double defaultTemperature;
-
-    @Value("${openai.default-max-tokens:512}")
-    private int defaultMaxTokens;
-
-    @Autowired
-    public OpenAiLlmTaskInstance(FlowEventBus eventBus) {
+    public OpenAiLlmTaskInstance(FlowEventBus eventBus,
+                                 String baseUrl,
+                                 String apiKey,
+                                 String defaultModel,
+                                 double defaultTemperature,
+                                 int defaultMaxTokens) {
         super(eventBus);
+        this.openAiBaseUrl = normalizeBaseUrl(baseUrl);
+        this.openAiApiKey = apiKey;
+        this.defaultModel = isBlank(defaultModel) ? DEFAULT_MODEL : defaultModel.trim();
+        this.defaultTemperature = normalizeTemperature(defaultTemperature);
+        this.defaultMaxTokens = Math.max(1, defaultMaxTokens);
     }
 
     @Override
     protected CompletableFuture<TaskOutputResult> internalExecute(TaskNode taskNode, NodeContext context, TaskOutputResult result) {
         String prompt = resolvePrompt(taskNode, context);
-        if (prompt == null || prompt.trim().isEmpty()) {
+        if (isBlank(prompt)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("llm prompt cannot be empty"));
         }
 
         String apiKey = resolveApiKey(taskNode, context);
-        if (apiKey == null || apiKey.trim().isEmpty()) {
+        if (isBlank(apiKey)) {
             return CompletableFuture.failedFuture(new IllegalStateException("OpenAI api key is required"));
         }
 
@@ -77,16 +82,18 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
         requestBody.put("max_tokens", maxTokens);
         requestBody.put("messages", buildMessages(systemPrompt, prompt));
 
-        String baseUrl = normalizeBaseUrl(openAiBaseUrl);
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(openAiBaseUrl + "/chat/completions"))
                 .timeout(Duration.ofSeconds(Math.max(5L, FlowDataKeys.NODE_TIMEOUT_SECOND.getDataOr(taskNode, 60L))))
-                .header("Authorization", "Bearer " + apiKey)
+                .header("Authorization", "Bearer " + apiKey.trim())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody.toJSONString(), StandardCharsets.UTF_8))
                 .build();
 
         CompletableFuture<TaskOutputResult> future = new CompletableFuture<>();
-        CompletableFuture<HttpResponse<String>> httpFuture = HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        CompletableFuture<HttpResponse<String>> httpFuture = HTTP_CLIENT.sendAsync(
+                request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
 
         FlowContext.CancellationRegistration cancellationRegistration = context.registerCancellationAction(() -> {
             httpFuture.cancel(true);
@@ -139,6 +146,7 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
 
     private static JSONArray buildMessages(String systemPrompt, String prompt) {
         JSONArray messages = new JSONArray();
+
         JSONObject systemMessage = new JSONObject();
         systemMessage.put("role", "system");
         systemMessage.put("content", systemPrompt);
@@ -148,6 +156,7 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
         userMessage.put("role", "user");
         userMessage.put("content", prompt);
         messages.add(userMessage);
+
         return messages;
     }
 
@@ -192,7 +201,7 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
     private static String normalizeBaseUrl(String baseUrl) {
         String normalized = Objects.requireNonNullElse(baseUrl, "").trim();
         if (normalized.isEmpty()) {
-            normalized = "https://api.openai.com/v1";
+            normalized = DEFAULT_BASE_URL;
         }
         if (normalized.endsWith("/")) {
             normalized = normalized.substring(0, normalized.length() - 1);
@@ -201,7 +210,7 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
     }
 
     private static double normalizeTemperature(Double temperatureValue) {
-        double value = temperatureValue == null ? 0.2d : temperatureValue;
+        double value = temperatureValue == null ? DEFAULT_TEMPERATURE : temperatureValue;
         if (value < 0d) {
             return 0d;
         }
@@ -213,19 +222,19 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
 
     private String resolveApiKey(TaskNode taskNode, NodeContext context) {
         String apiKeyStateKey = FlowDataKeys.NODE_LLM_API_KEY_STATE_KEY.getData(taskNode);
-        if (apiKeyStateKey != null && !apiKeyStateKey.trim().isEmpty()) {
+        if (!isBlank(apiKeyStateKey)) {
             Object stateValue = context.getState(apiKeyStateKey);
-            if (stateValue instanceof String stateApiKey && !stateApiKey.trim().isEmpty()) {
+            if (stateValue instanceof String stateApiKey && !isBlank(stateApiKey)) {
                 return stateApiKey.trim();
             }
         }
 
-        if (openAiApiKey != null && !openAiApiKey.trim().isEmpty()) {
+        if (!isBlank(openAiApiKey)) {
             return openAiApiKey.trim();
         }
 
         String envApiKey = System.getenv("OPENAI_API_KEY");
-        if (envApiKey != null && !envApiKey.trim().isEmpty()) {
+        if (!isBlank(envApiKey)) {
             return envApiKey.trim();
         }
         return null;
@@ -233,7 +242,7 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
 
     private static String resolvePrompt(TaskNode taskNode, NodeContext context) {
         String promptStateKey = FlowDataKeys.NODE_LLM_PROMPT_STATE_KEY.getData(taskNode);
-        if (promptStateKey != null && !promptStateKey.trim().isEmpty()) {
+        if (!isBlank(promptStateKey)) {
             Object stateValue = context.getState(promptStateKey);
             if (stateValue instanceof String promptText) {
                 return promptText;
@@ -247,5 +256,9 @@ public class OpenAiLlmTaskInstance extends AbstractTaskInstance {
 
     private static String resolveResultStateKey(TaskNode taskNode) {
         return FlowDataKeys.NODE_LLM_RESULT_STATE_KEY.getDataOr(taskNode, "llm.result." + taskNode.getId());
+    }
+
+    private static boolean isBlank(String text) {
+        return text == null || text.trim().isEmpty();
     }
 }
